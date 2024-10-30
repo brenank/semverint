@@ -1,6 +1,6 @@
 {
   "name": "semverint",
-  "version": "0.0.2",
+  "version": "1.0.0",
   "description": "A TypeScript utility for converting semantic versions into integer representations.",
   "keywords": [
     "semver",

@@ -1,0 +1,20 @@
+{
+  "name": "semverint",
+  "entries": [
+    {
+      "date": "Wed, 30 Oct 2024 22:02:01 GMT",
+      "version": "1.0.0",
+      "tag": "semverint_v1.0.0",
+      "comments": {
+        "major": [
+          {
+            "author": "brenankly@gmail.com",
+            "package": "semverint",
+            "commit": "9b65fa00bf206752c93679869bd0375da693838b",
+            "comment": "initial release"
+          }
+        ]
+      }
+    }
+  ]
+}
