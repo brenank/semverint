@@ -136,3 +136,5 @@ dist
 .nx/workspace-data
 
 .turbo
+
+.DS_Store
