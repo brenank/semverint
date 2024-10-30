@@ -2,10 +2,14 @@
   "name": "semverint",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "npm@22.9.0",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
+  "packageManager": "npm@22.9.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brenank/semverint.git"
+  },
   "scripts": {
     "build:cjs": "tsc --project tsconfig.cjs.json",
     "build:esm": "tsc",
@@ -22,27 +26,26 @@
     "change": "beachball change",
     "release": "beachball publish"
   },
+  "lint-staged": {
+    "**/*": "prettier --write --ignore-unknown"
+  },
   "devDependencies": {
     "@eslint/js": "^9.11.1",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
+    "@types/node": "^22.8.1",
+    "@types/semver": "^7.5.8",
     "@typescript-eslint/eslint-plugin": "^8.8.0",
     "@typescript-eslint/parser": "^8.8.0",
     "beachball": "2.47.1",
     "eslint": "^9.11.1",
     "eslint-config-prettier": "^9.1.0",
     "eslint-define-config": "^2.1.0",
+    "eslint-plugin-no-null": "^1.0.2",
     "eslint-plugin-prettier": "^5.2.1",
     "husky": "^9.1.6",
     "lint-staged": "^15.2.10",
     "prettier": "3.3.3",
     "typescript": "^5.0.0",
     "vitest": "^2.1.3"
-  },
-  "lint-staged": {
-    "**/*": "prettier --write --ignore-unknown"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/brenank/semverint.git"
   }
 }

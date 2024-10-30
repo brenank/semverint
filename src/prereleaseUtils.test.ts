@@ -1,0 +1,36 @@
+import { it, expect } from 'vitest'
+
+import { fmtFixedSizePrerelease } from './prereleaseUtils'
+
+it('fmtFixedSizePrerelease function', () => {
+  expect(() => fmtFixedSizePrerelease('000123456789', -1)).toThrowError('desiredLength must be an integer > 0')
+  expect(() => fmtFixedSizePrerelease('000123456789', 0)).toThrowError('desiredLength must be an integer > 0')
+  expect(() => fmtFixedSizePrerelease('000123456789', 1.1)).toThrowError('desiredLength must be an integer > 0')
+  expect(fmtFixedSizePrerelease('000123456789', 1)).toEqual({ strNum: '0', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 2)).toEqual({ strNum: '00', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 3)).toEqual({ strNum: '000', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 4)).toEqual({ strNum: '0001', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 5)).toEqual({ strNum: '00012', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 6)).toEqual({ strNum: '000123', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 7)).toEqual({ strNum: '0001235', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 8)).toEqual({ strNum: '00012346', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 9)).toEqual({ strNum: '000123457', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 10)).toEqual({ strNum: '0001234568', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 11)).toEqual({ strNum: '00012345679', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('000123456789', 12)).toEqual({ strNum: '000123456789', hasPrecisionLoss: false })
+  expect(fmtFixedSizePrerelease('000123456789', 22)).toEqual({ strNum: '0001234567890000000000', hasPrecisionLoss: false })
+
+  expect(fmtFixedSizePrerelease('123456789', 1)).toEqual({ strNum: '1', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('123456789', 2)).toEqual({ strNum: '12', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('123456789', 3)).toEqual({ strNum: '123', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('123456789', 4)).toEqual({ strNum: '1235', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('123456789', 5)).toEqual({ strNum: '12346', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('123456789', 6)).toEqual({ strNum: '123457', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('123456789', 7)).toEqual({ strNum: '1234568', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('123456789', 8)).toEqual({ strNum: '12345679', hasPrecisionLoss: true })
+  expect(fmtFixedSizePrerelease('123456789', 9)).toEqual({ strNum: '123456789', hasPrecisionLoss: false })
+  expect(fmtFixedSizePrerelease('123456789', 10)).toEqual({ strNum: '1234567890', hasPrecisionLoss: false })
+  expect(fmtFixedSizePrerelease('123456789', 11)).toEqual({ strNum: '12345678900', hasPrecisionLoss: false })
+  expect(fmtFixedSizePrerelease('123456789', 12)).toEqual({ strNum: '123456789000', hasPrecisionLoss: false })
+  expect(fmtFixedSizePrerelease('123456789', 22)).toEqual({ strNum: '1234567890000000000000', hasPrecisionLoss: false })
+})
