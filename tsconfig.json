@@ -4,11 +4,12 @@
     "module": "ESNext",
     "moduleResolution": "Node",
     "declaration": true,
+    "declarationDir": "./dist/types",
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist/esm"
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "src/**/*.test.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "src/**/*.test.ts", "**/test/**/*"]
 }
