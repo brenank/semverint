@@ -2,6 +2,21 @@
   "name": "semverint",
   "entries": [
     {
+      "date": "Thu, 31 Oct 2024 03:35:17 GMT",
+      "version": "2.0.0",
+      "tag": "semverint_v2.0.0",
+      "comments": {
+        "major": [
+          {
+            "author": "brenankly@gmail.com",
+            "package": "semverint",
+            "commit": "8da0b0a8319a5ac8ee80f41f52423ee08728a60a",
+            "comment": "break: update defaults & readme"
+          }
+        ]
+      }
+    },
+    {
       "date": "Wed, 30 Oct 2024 22:02:01 GMT",
       "version": "1.0.0",
       "tag": "semverint_v1.0.0",
