@@ -1,0 +1,7 @@
+{
+  "type": "major",
+  "comment": "break: update defaults & readme",
+  "packageName": "semverint",
+  "email": "brenankly@gmail.com",
+  "dependentChangeType": "patch"
+}
