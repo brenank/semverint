@@ -21,11 +21,11 @@ interface SemverIntConfig {
 }
 
 const DefaultConfig: SemverIntConfig = {
-  numMajorDigits: 3,
-  numMinorDigits: 3,
-  numPatchDigits: 3,
-  numPrereleaseDigits: 6,
-  numPrereleaseComponentDigits: 4,
+  numMajorDigits: 2,
+  numMinorDigits: 2,
+  numPatchDigits: 2,
+  numPrereleaseDigits: 10,
+  numPrereleaseComponentDigits: 6,
 
   majorVersionErrors: 'error',
   minorVersionErrors: 'error',
