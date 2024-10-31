@@ -11,7 +11,48 @@ can be used for version comparison in systems that do not natively support SemVe
 - Properly handles any combination of numeric & non-numeric prerelease components.
 - Supports mapping the first prerelease component (like "alpha", "beta") to a specific digit for compactness.
 
-### Warning: Precision Loss and Overflow Impact
+## Installation
+
+```bash
+npm install semverint
+```
+
+## Usage
+
+### Convert a SemVer String to an Integer
+
+You can use your own SemVer parsing library to extract the components (major, minor, patch, and prerelease) before passing them
+into the utility. The utility will always return a valid integer, and if any errors occur during the conversion, they will be
+provided in the result object. Exceptions are only thrown if the configuration parameters are invalid or if the provided
+components are not from a valid SemVer.
+
+```typescript
+import { semverToInt, setGlobalConfig } from 'semverint'
+
+setGlobalConfig({
+  numMajorDigits: 2,
+  numMinorDigits: 2,
+  numPatchDigits: 2,
+  numPrereleaseDigits: 10,
+  numPrereleaseComponentDigits: 6,
+})
+
+console.log(semverToInt('1', '2', '3', 'alpha').versionStr)
+console.log(semverToInt('1', '2', '3', 'beta').versionStr)
+console.log(semverToInt('1', '2', '3', 'rc.1').versionStr)
+console.log(semverToInt('1', '2', '3', 'zzz').versionStr)
+console.log(semverToInt('1', '2', '3', '').versionStr)
+console.log(semverToInt('2', '98', '5', '').versionStr)
+
+// 102037485899999
+// 102037578939999
+// 102039176000001
+// 102039898999999
+// 102039999999999
+// 298059999999999
+```
+
+### Errors
 
 When converting semantic version strings to integers, precision loss or overflows can occur if the provided version components
 exceed the configured number of digits. This can lead to incorrect integer representations, causing comparison operations to
@@ -31,46 +72,21 @@ appear equal when compared as integers.
 **Recommendation:** Always carefully configure the number of digits for each version component to accommodate the largest expected
 version values, and handle overflow errors as needed for your application.
 
-## Installation
-
-```bash
-npm install semverint
-```
-
-## Usage
-
-### Importing
-
-```typescript
-import { semverToInt, setGlobalConfig, SemverIntConfig, DefaultConfig, SemverIntConverter, SemverIntError } from 'semverint'
-```
-
-### Convert a SemVer String to an Integer
-
-You can use your own SemVer parsing library to extract the components (major, minor, patch, and prerelease) before passing them
-into the utility. The utility will always return a valid integer, and if any errors occur during the conversion, they will be
-provided in the result object. Exceptions are only thrown if the configuration parameters are invalid or if the provided
-components are not from a valid SemVer.
-
-```typescript
-const result = semverToInt('1', '2', '3', 'alpha.1')
-console.log(result.versionStr) // The integer representation as a string
-result.errs.forEach(error => {
-  console.error(error.message)
-})
-```
-
 ### Set Global Configuration
 
 You can adjust the global configuration for all conversions:
 
 ```typescript
+import { setGlobalConfig } from 'semverint'
+
 setGlobalConfig({
   numMajorDigits: 2,
   numMinorDigits: 2,
   numPatchDigits: 2,
   numPrereleaseDigits: 10,
   numPrereleaseComponentDigits: 6,
+  firstPrereleaseComponentToDigit: ['alpha', 'beta', 'rc', '', '', '', '', '', ''],
+  maxSemverInt: 999999999999n,
 })
 ```
 
@@ -105,21 +121,6 @@ components are converted to ASCII codes, two digits per character.
 Important: Depending on what is passed in firstPrereleaseComponentToDigit, this mapping may not adhere strictly to the standard
 SemVer specification. Custom mappings can introduce behaviors that diverge from the conventional ordering and interpretation of
 prerelease tags. Use this feature carefully if adhering strictly to SemVer precedence rules is required for your application.
-
-### Example of Custom Configuration
-
-```typescript
-const customConfig: Partial<SemverIntConfig> = {
-  numMajorDigits: 2,
-  numMinorDigits: 2,
-  numPatchDigits: 2,
-  numPrereleaseDigits: 10,
-  numPrereleaseComponentDigits: 6,
-  firstPrereleaseComponentToDigit: ['alpha', 'beta', 'rc', '', '', '', '', '', ''],
-  maxSemverInt: 999999999999n,
-}
-setGlobalConfig(customConfig)
-```
 
 ## Creating a Local Converter Instance
 
