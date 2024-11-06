@@ -12,7 +12,6 @@
     "semver integer"
   ],
   "license": "MIT",
-  "type": "module",
   "packageManager": "npm@22.9.0",
   "repository": {
     "type": "git",
@@ -35,6 +34,7 @@
     "build:cjs": "tsc --project tsconfig.cjs.json",
     "build:esm": "tsc",
     "build": "npm run build:cjs && npm run build:esm",
+    "postbuild": "tsconfig-to-dual-package",
     "validate": "npm run lint && npm run fmt && npm run test",
     "test": "vitest",
     "test:watch": "vitest --watch",
@@ -66,6 +66,7 @@
     "husky": "^9.1.6",
     "lint-staged": "^15.2.10",
     "prettier": "3.3.3",
+    "tsconfig-to-dual-package": "^1.2.0",
     "typescript": "^5.0.0",
     "vitest": "^2.1.3"
   }
