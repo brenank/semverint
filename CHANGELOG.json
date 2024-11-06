@@ -2,6 +2,21 @@
   "name": "semverint",
   "entries": [
     {
+      "date": "Wed, 06 Nov 2024 17:24:51 GMT",
+      "version": "2.0.1",
+      "tag": "semverint_v2.0.1",
+      "comments": {
+        "patch": [
+          {
+            "author": "brenankly@gmail.com",
+            "package": "semverint",
+            "commit": "448d91470579a0e12e1fbd1b1e7b1d8fce67243e",
+            "comment": "fix: commonjs"
+          }
+        ]
+      }
+    },
+    {
       "date": "Thu, 31 Oct 2024 03:35:17 GMT",
       "version": "2.0.0",
       "tag": "semverint_v2.0.0",

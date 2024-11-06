@@ -1,8 +1,16 @@
 # Change Log - semverint
 
-<!-- This log was last generated on Thu, 31 Oct 2024 03:35:17 GMT and should not be manually modified. -->
+<!-- This log was last generated on Wed, 06 Nov 2024 17:24:51 GMT and should not be manually modified. -->
 
 <!-- Start content -->
+
+## 2.0.1
+
+Wed, 06 Nov 2024 17:24:51 GMT
+
+### Patches
+
+- fix: commonjs (brenankly@gmail.com)
 
 ## 2.0.0
 
