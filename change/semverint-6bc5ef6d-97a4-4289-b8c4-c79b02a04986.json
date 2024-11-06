@@ -1,0 +1,7 @@
+{
+  "type": "patch",
+  "comment": "fix: commonjs",
+  "packageName": "semverint",
+  "email": "brenankly@gmail.com",
+  "dependentChangeType": "patch"
+}
