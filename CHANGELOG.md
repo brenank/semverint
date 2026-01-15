@@ -1,8 +1,16 @@
 # Change Log - semverint
 
-<!-- This log was last generated on Wed, 06 Nov 2024 17:24:51 GMT and should not be manually modified. -->
+<!-- This log was last generated on Thu, 15 Jan 2026 04:53:37 GMT and should not be manually modified. -->
 
 <!-- Start content -->
+
+## 2.0.2
+
+Thu, 15 Jan 2026 04:53:37 GMT
+
+### Patches
+
+- add: .js extensions to internal imports (brenankly@gmail.com)
 
 ## 2.0.1
 
