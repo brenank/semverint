@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest'
 
-import { fmtFixedSizeNumeric, fmtLimitSizeNumeric } from './numericUtils'
+import { fmtFixedSizeNumeric, fmtLimitSizeNumeric } from './numericUtils.js'
 
 it('fmtFixedSizeNumeric function', () => {
   expect(fmtFixedSizeNumeric('123456789', 1)).toEqual({ strNum: '9', hasOverflow: true })

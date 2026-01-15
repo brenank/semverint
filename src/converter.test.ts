@@ -2,7 +2,7 @@ import { readFileSync } from 'fs'
 import * as path from 'path'
 import { describe, it, expect } from 'vitest'
 
-import { SemverIntConverter, SemverIntResult } from './index'
+import { SemverIntConverter, SemverIntResult } from './index.js'
 
 const testPath: string = path.join(__dirname, 'test')
 const expectedTestPath: string = path.join(testPath, 'expected')

@@ -1,6 +1,6 @@
-import { SemverIntConverter, SemverIntResult } from './converter'
-import { SemverIntConfig, DefaultConfig } from './types/config'
-import { SemverIntError } from './types/errors'
+import { SemverIntConverter, SemverIntResult } from './converter.js'
+import { SemverIntConfig, DefaultConfig } from './types/config.js'
+import { SemverIntError } from './types/errors.js'
 
 let singleton: SemverIntConverter = new SemverIntConverter(DefaultConfig)
 

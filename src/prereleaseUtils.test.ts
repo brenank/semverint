@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest'
 
-import { fmtFixedSizePrerelease } from './prereleaseUtils'
+import { fmtFixedSizePrerelease } from './prereleaseUtils.js'
 
 it('fmtFixedSizePrerelease function', () => {
   expect(() => fmtFixedSizePrerelease('000123456789', -1)).toThrowError('desiredLength must be an integer > 0')

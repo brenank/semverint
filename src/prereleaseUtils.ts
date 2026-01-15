@@ -1,5 +1,5 @@
-import { fmtFixedSizeNumeric, isStrictInt } from './numericUtils'
-import { OverflowError, PrecisionLossError, SemverComponent, SemverIntError } from './types/errors'
+import { fmtFixedSizeNumeric, isStrictInt } from './numericUtils.js'
+import { OverflowError, PrecisionLossError, SemverComponent, SemverIntError } from './types/errors.js'
 
 const prereleaseCharToPrecedence: Record<string, string> = {
   '0': '36',
