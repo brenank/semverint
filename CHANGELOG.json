@@ -2,6 +2,21 @@
   "name": "semverint",
   "entries": [
     {
+      "date": "Thu, 15 Jan 2026 04:59:46 GMT",
+      "version": "2.0.2",
+      "tag": "semverint_v2.0.2",
+      "comments": {
+        "none": [
+          {
+            "author": "brenankly@gmail.com",
+            "package": "semverint",
+            "commit": "9fdb7e3f1f2d5b9b1938204accefab386bdd17c1",
+            "comment": "update: dev dependencies"
+          }
+        ]
+      }
+    },
+    {
       "date": "Thu, 15 Jan 2026 04:53:37 GMT",
       "version": "2.0.2",
       "tag": "semverint_v2.0.2",
