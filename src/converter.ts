@@ -1,7 +1,7 @@
-import { fmtFixedSizeNumeric, fmtLimitSizeNumeric, isStrictInt } from './numericUtils'
-import { prereleaseToInt } from './prereleaseUtils'
-import { SemverIntConfig, DefaultConfig } from './types/config'
-import { OverflowError, SemverComponent, SemverIntError } from './types/errors'
+import { fmtFixedSizeNumeric, fmtLimitSizeNumeric, isStrictInt } from './numericUtils.js'
+import { prereleaseToInt } from './prereleaseUtils.js'
+import { SemverIntConfig, DefaultConfig } from './types/config.js'
+import { OverflowError, SemverComponent, SemverIntError } from './types/errors.js'
 
 interface SemverIntResult {
   versionStr: string
