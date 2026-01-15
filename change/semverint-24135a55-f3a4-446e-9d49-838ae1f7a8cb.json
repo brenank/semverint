@@ -1,0 +1,7 @@
+{
+  "type": "patch",
+  "comment": "add: .js extensions to internal imports",
+  "packageName": "semverint",
+  "email": "brenankly@gmail.com",
+  "dependentChangeType": "patch"
+}
