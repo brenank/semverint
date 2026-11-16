@@ -1,0 +1,7 @@
+{
+  "packageName": "semverint",
+  "type": "none",
+  "comment": "test: characterize prerelease encoding and conversion limits",
+  "email": "brenankly@gmail.com",
+  "dependentChangeType": "none"
+}
