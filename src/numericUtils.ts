@@ -5,7 +5,10 @@ function isStrictInt(input: string): boolean {
 
 function fmtFixedSizeNumeric(strNumIn: string, desiredDigits: number): { strNum: string; hasOverflow: boolean } {
   const result = fmtLimitSizeNumeric(strNumIn, desiredDigits)
-  return { strNum: result.strNum.padStart(desiredDigits, '0'), hasOverflow: result.hasOverflow }
+  if (result.strNum.length < desiredDigits) {
+    return { strNum: strNumIn.padStart(desiredDigits, '0'), hasOverflow: false }
+  }
+  return result
 }
 
 function fmtLimitSizeNumeric(strNumIn: string, desiredDigits: number): { strNum: string; hasOverflow: boolean } {
@@ -17,16 +20,24 @@ function fmtLimitSizeNumeric(strNumIn: string, desiredDigits: number): { strNum:
     return { strNum: '', hasOverflow: true }
   }
 
-  if (!/^\d+$/.test(strNumIn)) {
+  const num = Number(strNumIn)
+  if (!Number.isInteger(num) || num < 0) {
     throw new Error(`strNum must be an integer >= 0, got: ${strNumIn}`)
   }
 
-  const strNum = strNumIn.replace(/^0+/, '') || '0'
-  if (strNum.length > desiredDigits) {
-    return { strNum: '9'.repeat(desiredDigits), hasOverflow: true }
+  if (strNumIn.length > desiredDigits) {
+    const digitsInNum = Math.floor(Math.log10(Math.abs(num))) + 1
+    const scaleFactorForDesiredLength = Math.pow(10, digitsInNum - desiredDigits)
+    const roundedValue = Math.round(num / scaleFactorForDesiredLength) * scaleFactorForDesiredLength
+    const maxValuePossible = Math.pow(10, desiredDigits) - 1
+    if (roundedValue <= maxValuePossible) {
+      return { strNum: String(roundedValue), hasOverflow: false }
+    }
+
+    return { strNum: String(maxValuePossible), hasOverflow: true }
   }
 
-  return { strNum, hasOverflow: false }
+  return { strNum: strNumIn, hasOverflow: false }
 }
 
 export { fmtLimitSizeNumeric, fmtFixedSizeNumeric, isStrictInt }

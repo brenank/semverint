@@ -42,6 +42,11 @@ describe('issue #10: process numeric identifier tails and diagnose insufficient 
 })
 
 describe('prerelease identifier processing', () => {
+  it('preserves current text behavior when a NaN identifier width is accepted', () => {
+    expect(prereleaseToInt('a', 10, NaN)).toEqual({ strNum: '7300000000', errs: [] })
+    expect(prereleaseToInt('alpha.a', 10, NaN, mapping)).toEqual({ strNum: '1730000000', errs: [] })
+  })
+
   it.each([
     ['1.alpha', '0000017385', [componentOverflow, precisionLoss]],
     ['1.2.alpha', '0000010000', [precisionLoss]],
@@ -145,6 +150,11 @@ describe('first prerelease identifier mapping', () => {
 })
 
 describe('exact numeric prerelease limits', () => {
+  it.each([1.5, NaN, Infinity])('rejects invalid numeric identifier width %s during conversion', digits => {
+    const converter = new SemverIntConverter({ numPrereleaseComponentDigits: digits })
+    expect(() => converter.semverToInt('1', '2', '3', '1')).toThrow()
+  })
+
   it.each([
     [1, '1', '1000000000', []],
     [1, '2', '2000000000', []],

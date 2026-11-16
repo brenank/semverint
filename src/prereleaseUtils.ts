@@ -1,4 +1,4 @@
-import { fmtFixedSizeNumeric, isStrictInt } from './numericUtils.js'
+import { isStrictInt } from './numericUtils.js'
 import { OverflowError, PrecisionLossError, SemverComponent, SemverIntError } from './types/errors.js'
 
 const prereleaseCharToPrecedence: Record<string, string> = {
@@ -83,7 +83,11 @@ function fmtFixedSizePrerelease(strNumIn: string, desiredDigits: number): { strN
   let strNum = strNumIn.slice(0, desiredDigits)
   if (strNumIn[desiredDigits] >= '5') {
     const rounded = String(BigInt(strNum) + 1n)
-    strNum = rounded.length > desiredDigits ? '9'.repeat(desiredDigits) : rounded.padStart(desiredDigits, '0')
+    if (rounded.length > desiredDigits) {
+      strNum = '9'.repeat(desiredDigits)
+    } else {
+      strNum = rounded.padStart(desiredDigits, '0')
+    }
   }
   return { strNum, hasPrecisionLoss: true }
 }
@@ -119,6 +123,9 @@ function prereleaseToInt(
       const firstDigit = firstPrereleaseComponentToDigit.findIndex(v => v == component) + 1
       prereleaseNumber += firstDigit
     } else if (isStrictInt(component)) {
+      if (!Number.isInteger(desiredComponentDigits) || desiredComponentDigits < 0) {
+        throw new Error(`desiredLength must be an integer >= 0, got ${desiredComponentDigits}`)
+      }
       if (desiredComponentDigits == 0) {
         hasComponentOverflow = true
       } else {
@@ -131,7 +138,8 @@ function prereleaseToInt(
           component.length > maxNumericComponent.length ||
           (component.length == maxNumericComponent.length && component > maxNumericComponent)
         const limitedComponent = hasComponentOverflow ? maxNumericComponent : component
-        prereleaseNumber += fmtFixedSizeNumeric(limitedComponent, desiredComponentDigits).strNum
+        // Keep canonical decimal digits exact without converting through Number.
+        prereleaseNumber += limitedComponent.padStart(desiredComponentDigits, '0')
       }
     } else {
       let asciiComponent = ''
@@ -139,7 +147,10 @@ function prereleaseToInt(
         asciiComponent += prereleaseCharToPrecedence[char]
       }
       hasComponentOverflow = asciiComponent.length > desiredComponentDigits
-      prereleaseNumber += asciiComponent.slice(0, desiredComponentDigits)
+      if (hasComponentOverflow) {
+        asciiComponent = asciiComponent.slice(0, desiredComponentDigits)
+      }
+      prereleaseNumber += asciiComponent
     }
 
     if (hasComponentOverflow) {
