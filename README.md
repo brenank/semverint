@@ -66,10 +66,10 @@ signal SemVer equality, even when the original versions differ.
   components will return an error and fill the remaining SemVer components' digits with the maximum possible value.
 
 - **Precision Loss**: Occurs when the remaining prerelease components exceed the configured reserved digits for the prerelease
-  integer representation. Excess digits are rounded exactly in decimal, with halfway values rounded upward and carry saturated to
-  the available width. Unused trailing positions are padded with zeros. Omitted identifiers also report precision loss, including
-  when a preceding identifier exactly fills the budget. The all-nine value is reserved for stable releases; a nonempty prerelease
-  that reaches it is reduced by one and reports precision loss.
+  integer representation. Excess digits are rounded exactly in decimal, with halfway values rounded upward. If rounding adds
+  another digit, the result uses the largest value that fits. Unused trailing positions are padded with zeros. Omitted identifiers
+  also report precision loss, including when a preceding identifier exactly fills the budget. The all-nine value is reserved for
+  stable releases; a nonempty prerelease that reaches it is reduced by one and reports precision loss.
 
 Both scenarios distort the original version’s integer representation. This means that two versions that were different may now
 appear equal when compared as integers.

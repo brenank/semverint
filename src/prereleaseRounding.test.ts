@@ -19,7 +19,7 @@ describe('prerelease decimal formatting', () => {
     ['12345', 4, '1235', true],
     ['12346', 4, '1235', true],
     ['99994', 4, '9999', true],
-  ])('formats %s to %s digits with leading zeros, padding, and half-threshold rounding', (input, digits, expected, loss) => {
+  ])('formats %s to %s digits using the first discarded digit to round', (input, digits, expected, loss) => {
     expect(fmtFixedSizePrerelease(input, digits)).toEqual({ strNum: expected, hasPrecisionLoss: loss })
   })
 
@@ -35,7 +35,7 @@ describe('prerelease decimal formatting', () => {
     ['999', 1, '9'],
     ['99995', 4, '9999'],
     ['99996', 4, '9999'],
-  ])('saturates rounding carry for %s to %s digits', (input, digits, expected) => {
+  ])('uses all nines when rounding %s would exceed %s digits', (input, digits, expected) => {
     expect(fmtFixedSizePrerelease(input, digits)).toEqual({ strNum: expected, hasPrecisionLoss: true })
   })
 

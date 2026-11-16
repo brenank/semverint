@@ -81,12 +81,16 @@ function fmtFixedSizePrerelease(strNumIn: string, desiredDigits: number): { strN
   }
 
   let strNum = strNumIn.slice(0, desiredDigits)
-  if (strNumIn[desiredDigits] >= '5') {
-    const rounded = String(BigInt(strNum) + 1n)
-    if (rounded.length > desiredDigits) {
+  const firstDiscardedDigit = strNumIn[desiredDigits]
+  if (firstDiscardedDigit >= '5') {
+    // BigInt keeps rounding exact even when the digits exceed Number's precision.
+    const roundedNumber = BigInt(strNum) + 1n
+    const roundedDigits = roundedNumber.toString()
+    if (roundedDigits.length > desiredDigits) {
+      // Rounding 999 to 1000 must not make the result wider than its digit budget.
       strNum = '9'.repeat(desiredDigits)
     } else {
-      strNum = rounded.padStart(desiredDigits, '0')
+      strNum = roundedDigits.padStart(desiredDigits, '0')
     }
   }
   return { strNum, hasPrecisionLoss: true }
@@ -129,17 +133,27 @@ function prereleaseToInt(
       if (desiredComponentDigits == 0) {
         hasComponentOverflow = true
       } else {
-        // Preserve the v2 range, including its shorter ceiling for odd component widths.
-        const minAsciiComponent = prereleaseCharToPrecedence['0']
-          .repeat(Math.max(1, desiredComponentDigits / 2))
-          .slice(0, desiredComponentDigits)
-        const maxNumericComponent = String(BigInt(minAsciiComponent) - 1n)
-        hasComponentOverflow =
-          component.length > maxNumericComponent.length ||
-          (component.length == maxNumericComponent.length && component > maxNumericComponent)
-        const limitedComponent = hasComponentOverflow ? maxNumericComponent : component
-        // Keep canonical decimal digits exact without converting through Number.
-        prereleaseNumber += limitedComponent.padStart(desiredComponentDigits, '0')
+        // Numeric identifiers must stay below the character codes. Keep the existing
+        // limit calculation, including odd widths, so stored encodings stay compatible.
+        const lowestCharacterCode = prereleaseCharToPrecedence['0']
+        const numCharacterCodes = Math.max(1, Math.floor(desiredComponentDigits / 2))
+        const repeatedCharacterCodes = lowestCharacterCode.repeat(numCharacterCodes)
+        const minTextComponent = repeatedCharacterCodes.slice(0, desiredComponentDigits)
+        const maxNumericComponent = (BigInt(minTextComponent) - 1n).toString()
+
+        // Compare decimal strings without converting large identifiers to Number.
+        // More digits means a larger number; equal-length strings can be compared directly.
+        if (component.length > maxNumericComponent.length) {
+          hasComponentOverflow = true
+        } else if (component.length == maxNumericComponent.length) {
+          hasComponentOverflow = component > maxNumericComponent
+        }
+
+        let numericDigits = component
+        if (hasComponentOverflow) {
+          numericDigits = maxNumericComponent
+        }
+        prereleaseNumber += numericDigits.padStart(desiredComponentDigits, '0')
       }
     } else {
       let asciiComponent = ''
@@ -165,13 +179,15 @@ function prereleaseToInt(
   }
 
   const prereleaseResult = fmtFixedSizePrerelease(prereleaseNumber, desiredDigits)
-  const stableSentinel = '9'.repeat(desiredDigits)
-  const reachesStableSentinel = prereleaseResult.strNum == stableSentinel
-  if (reachesStableSentinel) {
-    // A nonempty prerelease must remain below the corresponding stable release.
-    prereleaseResult.strNum = `${'9'.repeat(desiredDigits - 1)}8`
+  // Versions without a prerelease label use all nines in this field.
+  const digitsForStableRelease = '9'.repeat(desiredDigits)
+  const matchesStableReleaseDigits = prereleaseResult.strNum == digitsForStableRelease
+  if (matchesStableReleaseDigits) {
+    // A prerelease must sort below the same version without a prerelease label.
+    const largestPrereleaseNumber = BigInt(digitsForStableRelease) - 1n
+    prereleaseResult.strNum = largestPrereleaseNumber.toString()
   }
-  if (prereleaseResult.hasPrecisionLoss || hasUnprocessedComponents || reachesStableSentinel) {
+  if (prereleaseResult.hasPrecisionLoss || hasUnprocessedComponents || matchesStableReleaseDigits) {
     errs.push(new PrecisionLossError(SemverComponent.Prerelease, prerelease))
   }
   return { strNum: prereleaseResult.strNum, errs }

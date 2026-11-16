@@ -117,7 +117,7 @@ describe('zero digit budgets', () => {
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([componentOverflow, precisionLoss])
   })
 
-  it('keeps the stable sentinel with a zero prerelease component budget', () => {
+  it('keeps the stable release value with a zero prerelease component budget', () => {
     expect(prereleaseToInt('', 10, 0)).toEqual({ strNum: '9999999999', errs: [] })
   })
 })

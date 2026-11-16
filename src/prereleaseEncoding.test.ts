@@ -139,7 +139,7 @@ describe('first prerelease identifier mapping', () => {
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([precisionLoss])
   })
 
-  it('reserves the stable sentinel when the ninth mapping entry fills a one-digit budget', () => {
+  it('reserves the stable release value when the ninth mapping entry fills a one-digit budget', () => {
     const result = prereleaseToInt('last', 1, 6, mapping)
     expect(result.strNum).toBe('8')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([precisionLoss])
