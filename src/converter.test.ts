@@ -29,10 +29,10 @@ function testSemverToIntWithTestName(converter: SemverIntConverter, inputFileNam
     })
   }
 
-  let previousNumber = -1
+  let previousNumber = -1n
   for (const [i, line] of inputLines.entries()) {
     it(`precedence ${i + 1} ${line}`, () => {
-      const actualNum = Number(actuals[i].versionStr)
+      const actualNum = BigInt(actuals[i].versionStr)
       expect(actualNum).toBeGreaterThanOrEqual(previousNumber)
       previousNumber = actualNum
     })

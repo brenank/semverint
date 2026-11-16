@@ -5,7 +5,7 @@
 {"versionStr":"100001000001000","errs":[]}
 {"versionStr":"100001369473999","errs":[{"componentName":"prereleaseNumericComponent","name":"OverflowError"}]}
 {"versionStr":"100001747792999","errs":[{"componentName":"prereleaseNumericComponent","name":"OverflowError"}]}
-{"versionStr":"100001747792999","errs":[{"componentName":"prereleaseNumericComponent","name":"OverflowError"}]}
+{"versionStr":"100001747792999","errs":[{"componentName":"prereleaseNumericComponent","name":"OverflowError"},{"componentName":"prerelease","name":"PrecisionLossError"}]}
 {"versionStr":"100002744675999","errs":[{"componentName":"prereleaseNumericComponent","name":"OverflowError"}]}
 {"versionStr":"100003947384999","errs":[{"componentName":"prereleaseNumericComponent","name":"OverflowError"}]}
 {"versionStr":"100004000000000","errs":[]}

@@ -26,11 +26,11 @@ describe('conversion output widths', () => {
     })
   })
 
-  it('currently exceeds the reserved width when Number rounds a seventeen-digit overflow ceiling upward', () => {
+  it('saturates a seventeen-digit core component to exactly its reserved width', () => {
     const converter = new SemverIntConverter({ numMajorDigits: 17 })
     const result = converter.semverToInt('999999999999999999', '2', '3', '')
-    expect(result.versionStr).toBe('10000000000000000099999999999999')
-    expect(result.versionStr).toHaveLength(32)
+    expect(result.versionStr).toBe('9999999999999999999999999999999')
+    expect(result.versionStr).toHaveLength(31)
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
       { name: 'OverflowError', componentName: 'major' },
     ])
@@ -51,7 +51,7 @@ describe('error suppression affects diagnostics independently of encoded output'
       prereleaseNumericComponentErrors: componentErrors,
     })
     const result = converter.semverToInt('1', '2', '3', 'abcd.z')
-    expect(result.versionStr).toBe('1020373747')
+    expect(result.versionStr).toBe('1020373748')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
   })
 
@@ -59,7 +59,7 @@ describe('error suppression affects diagnostics independently of encoded output'
     ['majorVersionErrors', ['100', '2', '3'], '9999999999999999', 'major'],
     ['minorVersionErrors', ['1', '100', '3'], '199999999999999', 'minor'],
     ['patchVersionErrors', ['1', '2', '100'], '102999999999999', 'patch'],
-  ] as const)('currently saturates subsequent components even when %s is ignored', (flag, version, expected, component) => {
+  ] as const)('saturates subsequent components even when %s is ignored', (flag, version, expected, component) => {
     for (const strategy of ['error', 'ignore'] as const) {
       const converter = new SemverIntConverter({ [flag]: strategy })
       const result = converter.semverToInt(version[0], version[1], version[2], 'a')
@@ -76,7 +76,7 @@ describe('zero digit budgets', () => {
     ['numMajorDigits', '99999999999999', 'major'],
     ['numMinorDigits', '1999999999999', 'minor'],
     ['numPatchDigits', '1029999999999', 'patch'],
-  ] as const)('currently treats %s=0 as overflow and saturates the remaining components', (field, expected, component) => {
+  ] as const)('treats %s=0 as overflow and saturates the remaining components', (field, expected, component) => {
     const result = new SemverIntConverter({ [field]: 0 }).semverToInt('1', '2', '3', '')
     expect(result.versionStr).toBe(expected)
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
@@ -84,7 +84,7 @@ describe('zero digit budgets', () => {
     ])
   })
 
-  it('currently returns an empty string and major overflow when every budget is zero', () => {
+  it('returns zero and major overflow when every budget is zero', () => {
     const converter = new SemverIntConverter({
       numMajorDigits: 0,
       numMinorDigits: 0,
@@ -92,7 +92,7 @@ describe('zero digit budgets', () => {
       numPrereleaseDigits: 0,
     })
     const result = converter.semverToInt('0', '0', '0', '')
-    expect(result.versionStr).toBe('')
+    expect(result.versionStr).toBe('0')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
       { name: 'OverflowError', componentName: 'major' },
     ])
@@ -111,10 +111,10 @@ describe('zero digit budgets', () => {
     ).toEqual({ versionStr: '10203', errs: [] })
   })
 
-  it.each(['0', '1', 'a'])('currently saturates %s for a zero prerelease component budget', prerelease => {
+  it.each(['0', '1', 'a'])('reserves stable precedence when %s has a zero prerelease component budget', prerelease => {
     const result = prereleaseToInt(prerelease, 10, 0)
-    expect(result.strNum).toBe('9999999999')
-    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([componentOverflow])
+    expect(result.strNum).toBe('9999999998')
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([componentOverflow, precisionLoss])
   })
 
   it('keeps the stable sentinel with a zero prerelease component budget', () => {
@@ -166,69 +166,97 @@ describe('maximum integer clamping', () => {
   })
 
   it.each([
-    [['10', '0', '0'], '99999', 'major'],
-    [['1', '10', '0'], '19999', 'minor'],
-    [['1', '0', '10'], '10999', 'patch'],
-  ])('currently bypasses maxSemverInt on core overflow for %j', (version, expected, component) => {
-    const converter = new SemverIntConverter({
-      numMajorDigits: 1,
-      numMinorDigits: 1,
-      numPatchDigits: 1,
-      numPrereleaseDigits: 2,
-      maxSemverInt: 5n,
-    })
-    const result = converter.semverToInt(version[0], version[1], version[2], '')
-    expect(result.versionStr).toBe(expected)
-    expect(BigInt(result.versionStr)).toBeGreaterThan(5n)
-    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
-      { name: 'OverflowError', componentName: component },
-    ])
-  })
-
-  it('currently treats a zero maximum as disabled', () => {
-    expect(new SemverIntConverter({ maxSemverInt: 0n }).semverToInt('1', '2', '3', '')).toEqual({
-      versionStr: '102039999999999',
-      errs: [],
-    })
-  })
-
-  it('currently accepts a negative maximum and returns it on clamping', () => {
-    const result = new SemverIntConverter({ maxSemverInt: -1n }).semverToInt('1', '2', '3', '')
-    expect(result.versionStr).toBe('-1')
-    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([integerOverflow])
-  })
-})
-
-describe('existing component and configuration validation', () => {
-  it.each([
-    ['numMajorDigits', 'numMajorDigits'],
-    ['numMinorDigits', 'numMinorDigits'],
-    ['numPatchDigits', 'numPatchDigits'],
-    ['numPrereleaseDigits', 'numPrereleaseDigits'],
-    ['numPrereleaseComponentDigits', 'numPrereleaseNumericComponentDigits'],
-  ] as const)('rejects negative %s with the current diagnostic', (field, diagnostic) => {
-    expect(() => new SemverIntConverter({ [field]: -1 })).toThrow(`${diagnostic} must be greater than or equal to zero.`)
-  })
-
-  it.each(['numMajorDigits', 'numMinorDigits', 'numPatchDigits', 'numPrereleaseDigits', 'numPrereleaseComponentDigits'] as const)(
-    'currently accepts non-integer or non-finite %s at construction',
-    field => {
-      for (const width of [1.5, NaN, Infinity]) {
-        const converter = new SemverIntConverter({ [field]: width })
-        expect(converter.cfg[field]).toBe(width)
+    [['10', '0', '0'], 'major', 'majorVersionErrors'],
+    [['1', '10', '0'], 'minor', 'minorVersionErrors'],
+    [['1', '0', '10'], 'patch', 'patchVersionErrors'],
+  ] as const)(
+    'applies maxSemverInt after core overflow for %j, including ignored component errors',
+    (version, component, flag) => {
+      for (const strategy of ['error', 'ignore'] as const) {
+        const converter = new SemverIntConverter({
+          numMajorDigits: 1,
+          numMinorDigits: 1,
+          numPatchDigits: 1,
+          numPrereleaseDigits: 2,
+          maxSemverInt: 5n,
+          [flag]: strategy,
+        })
+        const result = converter.semverToInt(version[0], version[1], version[2], '')
+        expect(result.versionStr).toBe('5')
+        expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(
+          strategy == 'error' ? [{ name: 'OverflowError', componentName: component }, integerOverflow] : [integerOverflow],
+        )
       }
     },
   )
 
-  it.each([1.5, NaN, Infinity])('currently defers invalid major width %s rejection until conversion', width => {
-    const converter = new SemverIntConverter({ numMajorDigits: width })
-    expect(() => converter.semverToInt('1', '2', '3', '')).toThrow('desiredLength must be an integer >= 0')
+  it('applies a zero maximum', () => {
+    const result = new SemverIntConverter({ maxSemverInt: 0n }).semverToInt('1', '2', '3', '')
+    expect(result.versionStr).toBe('0')
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([integerOverflow])
   })
 
-  it('currently truncates a fractional prerelease width on the stable path but rejects it for a prerelease', () => {
-    const converter = new SemverIntConverter({ numPrereleaseDigits: 1.5 })
-    expect(converter.semverToInt('1', '2', '3', '')).toEqual({ versionStr: '102039', errs: [] })
-    expect(() => converter.semverToInt('1', '2', '3', 'a')).toThrow('desiredLength must be an integer > 0')
+  it('rejects a negative maximum at construction', () => {
+    expect(() => new SemverIntConverter({ maxSemverInt: -1n })).toThrow(
+      'maxSemverInt must be a bigint greater than or equal to zero.',
+    )
+  })
+
+  it.each([1, -1, '1', false])('rejects a non-bigint maximum %j at construction', maximum => {
+    expect(() => new SemverIntConverter({ maxSemverInt: maximum as unknown as bigint })).toThrow(
+      'maxSemverInt must be a bigint greater than or equal to zero.',
+    )
+  })
+
+  it('compares large core values and maximum integers exactly', () => {
+    const converter = new SemverIntConverter({
+      numMajorDigits: 22,
+      numPrereleaseDigits: 0,
+      maxSemverInt: 10000000000000000000000000n,
+    })
+    expect(converter.semverToInt('999999999999999999999', '99', '99', '')).toEqual({
+      versionStr: '9999999999999999999999999',
+      errs: [],
+    })
+    expect(converter.semverToInt('1000000000000000000000', '0', '0', '')).toEqual({
+      versionStr: '10000000000000000000000000',
+      errs: [],
+    })
+    const above = converter.semverToInt('1000000000000000000000', '0', '1', '')
+    expect(above.versionStr).toBe('10000000000000000000000000')
+    expect(above.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([integerOverflow])
+  })
+})
+
+describe('existing component and configuration validation', () => {
+  it.each(['numMajorDigits', 'numMinorDigits', 'numPatchDigits', 'numPrereleaseDigits', 'numPrereleaseComponentDigits'] as const)(
+    'rejects negative %s at construction',
+    field => {
+      expect(() => new SemverIntConverter({ [field]: -1 })).toThrow(`${field} must be an integer greater than or equal to zero.`)
+    },
+  )
+
+  it.each(['numMajorDigits', 'numMinorDigits', 'numPatchDigits', 'numPrereleaseDigits', 'numPrereleaseComponentDigits'] as const)(
+    'rejects non-integer or non-finite %s at construction',
+    field => {
+      for (const width of [1.5, NaN, Infinity]) {
+        expect(() => new SemverIntConverter({ [field]: width })).toThrow(
+          `${field} must be an integer greater than or equal to zero.`,
+        )
+      }
+    },
+  )
+
+  it.each([1.5, NaN, Infinity])('rejects invalid major width %s before conversion', width => {
+    expect(() => new SemverIntConverter({ numMajorDigits: width })).toThrow(
+      'numMajorDigits must be an integer greater than or equal to zero.',
+    )
+  })
+
+  it('rejects a fractional prerelease width at construction for both stable and prerelease usage', () => {
+    expect(() => new SemverIntConverter({ numPrereleaseDigits: 1.5 })).toThrow(
+      'numPrereleaseDigits must be an integer greater than or equal to zero.',
+    )
   })
 
   it.each(['', '-1', '01', '+1', '1.0', '1e2', ' 1', '1 ', 'NaN'])(
@@ -247,8 +275,20 @@ describe('existing component and configuration validation', () => {
     )
   })
 
-  it('rejects a core numeric string too large for a finite Number', () => {
-    expect(() => new SemverIntConverter({}).semverToInt('9'.repeat(309), '0', '0', '')).toThrow('strNum must be an integer >= 0')
+  it('reports overflow for a core numeric string too large for a finite Number', () => {
+    const result = new SemverIntConverter({}).semverToInt('9'.repeat(309), '0', '0', '')
+    expect(result.versionStr).toBe('9999999999999999')
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
+      { name: 'OverflowError', componentName: 'major' },
+    ])
+  })
+
+  it('preserves a core numeric string too large for a finite Number when its budget is sufficient', () => {
+    const converter = new SemverIntConverter({ numMajorDigits: 309 })
+    expect(converter.semverToInt('9'.repeat(309), '0', '0', '')).toEqual({
+      versionStr: `${'9'.repeat(309)}00009999999999`,
+      errs: [],
+    })
   })
 })
 

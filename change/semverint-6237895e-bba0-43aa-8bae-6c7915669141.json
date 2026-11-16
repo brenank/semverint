@@ -1,0 +1,7 @@
+{
+  "packageName": "semverint",
+  "type": "patch",
+  "comment": "fix: process prerelease suffixes and report conversion loss with exact integer bounds",
+  "email": "brenankly@gmail.com",
+  "dependentChangeType": "patch"
+}

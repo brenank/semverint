@@ -1,15 +1,15 @@
 # semverint
 
-A TypeScript utility for converting [semantic versioning (SemVer)](https://semver.org) strings into integer representations. This
-can be used for version comparison in systems that do not natively support SemVer.
+A TypeScript utility for converting [semantic versioning (SemVer)](https://semver.org) components into decimal integer strings.
+This can support version comparisons in systems that do not natively support SemVer, subject to the v2 encoding limitations below.
 
 ## Features
 
-- Produces an integer that adheres to SemVer precedence rules
-- Configurable number of digits for each SemVer component (major, minor, patch, prerelease).
-- Flexible error handling for each SemVer component.
-- Properly handles any combination of numeric & non-numeric prerelease components.
-- Supports mapping the first prerelease component (like "alpha", "beta") to a specific digit for compactness.
+- Configurable digit budgets for major, minor, patch, and prerelease components.
+- Exact decimal conversion, rounding, and saturation, including values beyond JavaScript's safe integer range.
+- Configurable overflow and precision-loss diagnostics.
+- Numeric and non-numeric prerelease identifiers, including identifiers following numeric ones.
+- Optional mapping of the first prerelease identifier to a single digit.
 
 ## Installation
 
@@ -19,12 +19,9 @@ npm install semverint
 
 ## Usage
 
-### Convert a SemVer String to an Integer
-
-You can use your own SemVer parsing library to extract the components (major, minor, patch, and prerelease) before passing them
-into the utility. The utility will always return a valid integer, and if any errors occur during the conversion, they will be
-provided in the result object. Exceptions are only thrown if the configuration parameters are invalid or if the provided
-components are not from a valid SemVer.
+Use your own SemVer parser to validate and extract the components before conversion. Pass canonical decimal strings for major,
+minor, and patch, and a dot-separated prerelease string, or `''` for a stable release. Build metadata does not affect precedence
+and is not an input to the converter.
 
 ```typescript
 import { semverToInt, setGlobalConfig } from 'semverint'
@@ -44,127 +41,138 @@ console.log(semverToInt('1', '2', '3', 'zzz').versionStr)
 console.log(semverToInt('1', '2', '3', '').versionStr)
 console.log(semverToInt('2', '98', '5', '').versionStr)
 
-// 102037485899999
-// 102037578939999
-// 102039176000001
-// 102039898999999
+// 102037384889999
+// 102037477929999
+// 102039075000001
+// 102039898980000
 // 102039999999999
 // 298059999999999
 ```
 
-### Errors
-
-When converting semantic version strings to integers, precision loss or overflows can occur if the provided version components
-exceed the configured number of digits. This can lead to incorrect integer representations, causing comparison operations to
-signal SemVer equality, even when the original versions differ.
-
-#### Why This Matters
-
-- **Overflow**: Happens when a component exceeds the configured reserved digits for the integer representation. Overflowed
-  components will return an error and fill the remaining SemVer components' digits with the maximum possible value.
-
-- **Precision Loss**: Occurs when the remaining prerelease components exceed the configured reserved digits for the prerelease
-  integer representation. An Precision Loss error means the excess digits were rounded.
-
-Both scenarios distort the original version’s integer representation. This means that two versions that were different may now
-appear equal when compared as integers.
-
-**Recommendation:** Always carefully configure the number of digits for each version component to accommodate the largest expected
-version values, and handle overflow errors as needed for your application.
-
-### Set Global Configuration
-
-You can adjust the global configuration for all conversions:
+`alpha` and `beta` exceed the six-digit identifier budget in this example and return component overflow errors. Inspect `errs`
+before relying on an integer comparison. Compare `versionStr` values with `BigInt`; converting them to `Number` can lose
+precision.
 
 ```typescript
-import { setGlobalConfig } from 'semverint'
+const earlier = semverToInt('1', '2', '3', 'rc.1')
+const later = semverToInt('1', '2', '3', 'rc.2')
+console.log(BigInt(earlier.versionStr) < BigInt(later.versionStr)) // true
+```
 
-setGlobalConfig({
+The result contains `versionStr` and an `errs` array. Invalid configuration and invalid core-component inputs throw exceptions;
+valid input values that exceed a configured budget return diagnostics with the saturated or rounded result. A configuration with
+every digit budget set to zero returns `'0'` and a major-component overflow diagnostic.
+
+## Configuration
+
+The constructor and `setGlobalConfig` accept a partial `SemverIntConfig`, filled from these defaults:
+
+```typescript
+{
   numMajorDigits: 2,
   numMinorDigits: 2,
   numPatchDigits: 2,
   numPrereleaseDigits: 10,
   numPrereleaseComponentDigits: 6,
+  majorVersionErrors: 'error',
+  minorVersionErrors: 'error',
+  patchVersionErrors: 'error',
+  prereleaseErrors: 'error',
+  prereleaseNumericComponentErrors: 'error',
+}
+```
+
+All digit budgets must be finite, nonnegative integers. `maxSemverInt`, when supplied, must be a nonnegative `bigint`, including
+`0n`. Each call to `setGlobalConfig` replaces the global configuration using defaults for omitted fields.
+
+- `numMajorDigits`, `numMinorDigits`, and `numPatchDigits` reserve decimal widths. Major is unpadded; minor and patch are padded
+  with leading zeros.
+- `numPrereleaseDigits` reserves the total prerelease width. Stable releases fill it with nines. A nonempty prerelease remains
+  strictly below that sentinel whenever the width is positive.
+- `numPrereleaseComponentDigits` limits each unmapped identifier. Numeric identifiers are left-padded to this width. Text uses the
+  v2 character codes, two digits per character, without padding between identifiers. For example, `rc.1` with an identifier width
+  of four becomes `90750001` before total-width padding or rounding.
+- `firstPrereleaseComponentToDigit` optionally maps the first identifier to a single digit.
+- `maxSemverInt` caps the complete result, including results produced by component overflow. Overall overflow is always reported.
+
+### Numeric prerelease range
+
+The v2 encoding reserves a numeric range below its text codes. At the default identifier width of six, numeric identifiers range
+from `0` through `363635`. Larger numeric identifiers clamp to that ceiling, return a component overflow diagnostic, and fill
+unused prerelease digits with nines, subject to the stable-release sentinel. Identifier processing stops on component overflow.
+
+The ceiling is computed exactly from repeated `36` character codes minus one. A width of one has a ceiling of `2`. For odd widths
+greater than one, the v2 threshold uses the next lower even number of digits: a width of three has a ceiling of `35`.
+
+### Compact first-identifier mapping
+
+```typescript
+setGlobalConfig({
   firstPrereleaseComponentToDigit: ['alpha', 'beta', 'rc', '', '', '', '', '', ''],
-  maxSemverInt: 999999999999n,
 })
 ```
 
-## Configuration
+A match uses its first array index plus one; an unknown first identifier uses `0`. This applies to numeric first identifiers too.
+The mapped digit counts toward the total prerelease budget and bypasses the identifier budget. Remaining identifiers use their
+normal numeric or text encoding. Stable releases always use the stable sentinel. If the ninth mapping entry would occupy the
+entire one-digit prerelease budget, its value clamps below the stable sentinel and reports precision loss.
 
-The converter uses a configuration object (`SemverIntConfig`) to customize how version strings are converted. This includes:
+Custom mapping order can differ from SemVer precedence. Use the same mapping for every value you compare.
 
-#### Digits
+## Errors and precision
 
-- `numMajorDigits`, `numMinorDigits`, `numPatchDigits`, `numPrereleaseDigits`, `numPrereleaseComponentDigits`: The number of
-  digits reserved for each version component.
-- `numPrereleaseComponentDigits`: Specifies the number of digits allocated to each component within a prerelease string (split by
-  `.`). For instance, with a configuration of `numPrereleaseComponentDigits = 4`, `rc.1` would be converted into `'91760001'`.
-- `firstPrereleaseComponentToDigit`: Optional mapping of the first prerelease component to a specific digit.
-- `maxSemverInt`: Optional maximum integer limit for the entire converted SemVer.
+Returned errors have `name`, `componentName`, and `message` fields.
 
-#### Error Handling
+- `OverflowError` identifies a major, minor, patch, prerelease, prerelease identifier, or overall integer overflow. Core-component
+  overflow saturates that component and all following digits with nines. A nonempty prerelease with a zero total budget reports
+  prerelease overflow. Text-identifier truncation and numeric-identifier clamping report `prereleaseNumericComponent` overflow.
+- `PrecisionLossError` identifies loss in the total prerelease budget. An encoding longer than this budget is rounded to nearest,
+  with an exact decimal half rounded upward. Leading zeros are preserved; rounding carry saturates instead of wrapping. Unused
+  trailing positions are padded with zeros. Discarded remaining identifiers also report precision loss, including when a preceding
+  identifier exactly fills the budget. Reserving the stable sentinel can also report precision loss.
 
-- `majorVersionErrors`, `minorVersionErrors`, `patchVersionErrors`, `prereleaseErrors`, `prereleaseNumericComponentErrors`: Define
-  the error handling strategy for each version component (`'error'` or `'ignore'`).
+`majorVersionErrors`, `minorVersionErrors`, `patchVersionErrors`, `prereleaseErrors`, and `prereleaseNumericComponentErrors`
+accept `'error'` or `'ignore'`. Ignoring a category suppresses its returned diagnostics while preserving the encoded result. The
+`prereleaseNumericComponentErrors` option controls both numeric and text identifier overflow. Overall `maxSemverInt` overflow is
+reported independently of these options.
 
-You can create a custom configuration by passing a partial config to the `setGlobalConfig` function or directly to the
-`SemverIntConverter` constructor.
+Overflow and precision loss can collapse distinct versions or distort ordering. Choose adequate budgets and handle returned errors
+for your application.
 
-### Note on `firstPrereleaseComponentToDigit`
+## V2 encoding limitations
 
-This configuration allows mapping the first prerelease component to a single-digit number. This is useful if you only use a small
-set of prerelease components, to support compacting the prerelease integer size. The digit will be the index+1 of the matching
-string in the array. If a component doesn't match any string in the array, it will be assigned a digit of 0. Subsequent prerelease
-components are converted to ASCII codes, two digits per character.
+Even conversions with an empty `errs` array can differ from SemVer comparison:
 
-Important: Depending on what is passed in firstPrereleaseComponentToDigit, this mapping may not adhere strictly to the standard
-SemVer specification. Custom mappings can introduce behaviors that diverge from the conventional ordering and interpretation of
-prerelease tags. Use this feature carefully if adhering strictly to SemVer precedence rules is required for your application.
+- Text identifiers have no boundary marker: `a.b` and `ab` can encode to the same value.
+- Zero identifiers can be indistinguishable from padding: `a`, `a.0`, and `a.0.0` can collide even with sufficient space.
+- Concatenated text identifiers can reverse order: `a.z` encodes above `aa`, despite its lower SemVer precedence.
+- The v2 character table places the hyphen above digits, so `-` encodes above `0a`, reversing ASCII precedence.
 
-## Creating a Local Converter Instance
+Use a SemVer comparator when these distinctions matter. Increasing digit budgets prevents budget loss but cannot resolve these
+encoding ambiguities.
 
-While the provided `semverToInt` function uses a global configuration, you can also create an instance of the `SemverIntConverter`
-locally with custom settings:
-
-### Example
+## Local converter instances
 
 ```typescript
-import { SemverIntConverter, SemverIntConfig } from 'semverint'
+import { SemverIntConverter } from 'semverint'
 
-const localConfig: Partial<SemverIntConfig> = {
+const converter = new SemverIntConverter({
   numMajorDigits: 2,
   numMinorDigits: 2,
   numPatchDigits: 2,
   numPrereleaseDigits: 16,
   numPrereleaseComponentDigits: 8,
-}
+})
 
-const localConverter = new SemverIntConverter(localConfig)
-
-const result = localConverter.semverToInt('1', '2', '3', 'beta.1')
-console.log(result.versionStr) // 102037578937400000001
+const result = converter.semverToInt('1', '2', '3', 'beta.1')
+console.log(result.versionStr) // 102037477927300000001
+console.log(result.errs) // []
 ```
 
-By creating a local instance, you can control configurations for specific tasks or threads, isolating them from the global
-converter.
+Local converters keep their own configuration independently of the global converter.
 
-## Warning: Consistency in Integer Settings
+## Comparing stored integers
 
-**Important:** When using multiple instances of `SemverIntConverter`, ensure that all instances use the same integer settings
-(`numMajorDigits`, `numMinorDigits`, `numPatchDigits`, and `numPrereleaseDigits`).
-
-### Why This Matters
-
-If different instances of `SemverIntConverter` use varying digit lengths or mappings, the resulting integer values for the same
-version string will differ. This will cause inconsistencies in comparisons and equality checks, making it impossible to reliably
-compare version integers across differently configured converters.
-
-**Example Issue:** If one converter is configured to use 3 digits for the minor version while another uses 2, converting `"1.2.3"`
-might yield `"1002003"` in one case and `"102003"` in the other. Such inconsistencies will lead to incorrect comparisons and
-potentially erroneous version management behavior.
-
-### Best Practice
-
-To avoid this issue, define a common configuration object and reuse it across all converter instances. Alternatively, use the
-global converter (`setGlobalConfig`) for all version conversion tasks if you require consistency throughout your application.
+Use the same digit budgets, mapping, and encoding version for every stored integer in a comparison. Configuration and encoding
+version are part of the storage contract; store them alongside the values or establish them for the complete dataset. When that
+contract changes, regenerate the compared values from their original SemVer components using one consistent configuration.

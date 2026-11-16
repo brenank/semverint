@@ -72,27 +72,20 @@ function fmtFixedSizePrerelease(strNumIn: string, desiredDigits: number): { strN
     throw new Error(`desiredLength must be an integer > 0, got ${desiredDigits}`)
   }
 
-  const num = Number(strNumIn)
-  if (!Number.isInteger(num) || num < 0) {
+  if (!/^\d+$/.test(strNumIn)) {
     throw new Error(`strNum must be an integer >= 0, got: ${strNumIn}`)
   }
 
-  if (strNumIn.length < desiredDigits) {
-    // Pad with trailing nines (v1.0.0-beta > v1.0.0-betatest)
+  if (strNumIn.length <= desiredDigits) {
     return { strNum: strNumIn.padEnd(desiredDigits, '0'), hasPrecisionLoss: false }
   }
 
-  if (strNumIn.length > desiredDigits) {
-    const digitsInNum = Math.floor(Math.log10(Math.abs(num))) + 1
-
-    // if strNumIn has leading zeros, preserve them
-    const numLeadingZeros = strNumIn.match(/^0*/)?.[0].length || 0
-    const scaleFactorForDigits = Math.pow(10, digitsInNum + numLeadingZeros)
-    const decimalNum = num / scaleFactorForDigits
-    return { strNum: decimalNum.toFixed(desiredDigits).slice(2), hasPrecisionLoss: true }
+  let strNum = strNumIn.slice(0, desiredDigits)
+  if (strNumIn[desiredDigits] >= '5') {
+    const rounded = String(BigInt(strNum) + 1n)
+    strNum = rounded.length > desiredDigits ? '9'.repeat(desiredDigits) : rounded.padStart(desiredDigits, '0')
   }
-
-  return { strNum: strNumIn, hasPrecisionLoss: false }
+  return { strNum, hasPrecisionLoss: true }
 }
 
 function prereleaseToInt(
@@ -118,62 +111,56 @@ function prereleaseToInt(
     return { strNum: '', errs }
   }
 
-  for (const [i, component] of prerelease.split('.').entries()) {
+  const components = prerelease.split('.')
+  let hasUnprocessedComponents = false
+  for (const [i, component] of components.entries()) {
+    let hasComponentOverflow = false
     if (i == 0 && firstPrereleaseComponentToDigit !== undefined) {
-      // firstPrereleaseComponentToDigit 0 index is reserved for no match
       const firstDigit = firstPrereleaseComponentToDigit.findIndex(v => v == component) + 1
       prereleaseNumber += firstDigit
-      continue
+    } else if (isStrictInt(component)) {
+      if (desiredComponentDigits == 0) {
+        hasComponentOverflow = true
+      } else {
+        // Preserve the v2 range, including its shorter ceiling for odd component widths.
+        const minAsciiComponent = prereleaseCharToPrecedence['0']
+          .repeat(Math.max(1, desiredComponentDigits / 2))
+          .slice(0, desiredComponentDigits)
+        const maxNumericComponent = String(BigInt(minAsciiComponent) - 1n)
+        hasComponentOverflow =
+          component.length > maxNumericComponent.length ||
+          (component.length == maxNumericComponent.length && component > maxNumericComponent)
+        const limitedComponent = hasComponentOverflow ? maxNumericComponent : component
+        prereleaseNumber += fmtFixedSizeNumeric(limitedComponent, desiredComponentDigits).strNum
+      }
+    } else {
+      let asciiComponent = ''
+      for (const char of component) {
+        asciiComponent += prereleaseCharToPrecedence[char]
+      }
+      hasComponentOverflow = asciiComponent.length > desiredComponentDigits
+      prereleaseNumber += asciiComponent.slice(0, desiredComponentDigits)
     }
 
-    if (isStrictInt(component)) {
-      let num = Number(component)
-
-      // limit numeric component to avoid overlapping with ascii
-      const minAsciiComponent = prereleaseCharToPrecedence['0']
-        .repeat(Math.max(1, desiredComponentDigits / 2))
-        .slice(0, desiredComponentDigits)
-      const maxNumericComponentNum = Number(minAsciiComponent) - 1
-      if (num > maxNumericComponentNum) {
-        num = maxNumericComponentNum
-      }
-
-      const result = fmtFixedSizeNumeric(String(num), desiredComponentDigits)
-      prereleaseNumber += result.strNum
-      if (result.hasOverflow) {
-        const remainingDigits = desiredDigits - prereleaseNumber.length
-        if (remainingDigits > 0) {
-          prereleaseNumber += '9'.repeat(remainingDigits)
-        }
-        errs.push(new OverflowError(SemverComponent.PrereleaseComponent, component))
-      }
-      break
-    }
-
-    let asciiComponentNum = ''
-    for (const char of component) {
-      asciiComponentNum += prereleaseCharToPrecedence[char]
-    }
-
-    if (asciiComponentNum.length > desiredComponentDigits) {
-      asciiComponentNum = asciiComponentNum.slice(0, desiredComponentDigits)
-      prereleaseNumber += asciiComponentNum
-      const remainingDigits = desiredDigits - prereleaseNumber.length
-      if (remainingDigits > 0) {
-        prereleaseNumber += '9'.repeat(remainingDigits)
-      }
+    if (hasComponentOverflow) {
+      prereleaseNumber = prereleaseNumber.padEnd(desiredDigits, '9')
       errs.push(new OverflowError(SemverComponent.PrereleaseComponent, component))
-      break
     }
 
-    prereleaseNumber += asciiComponentNum
-    if (prereleaseNumber.length >= desiredDigits) {
+    if (hasComponentOverflow || prereleaseNumber.length >= desiredDigits) {
+      hasUnprocessedComponents = i < components.length - 1
       break
     }
   }
 
   const prereleaseResult = fmtFixedSizePrerelease(prereleaseNumber, desiredDigits)
-  if (prereleaseResult.hasPrecisionLoss) {
+  const stableSentinel = '9'.repeat(desiredDigits)
+  const reachesStableSentinel = prereleaseResult.strNum == stableSentinel
+  if (reachesStableSentinel) {
+    // A nonempty prerelease must remain below the corresponding stable release.
+    prereleaseResult.strNum = `${'9'.repeat(desiredDigits - 1)}8`
+  }
+  if (prereleaseResult.hasPrecisionLoss || hasUnprocessedComponents || reachesStableSentinel) {
     errs.push(new PrecisionLossError(SemverComponent.Prerelease, prerelease))
   }
   return { strNum: prereleaseResult.strNum, errs }

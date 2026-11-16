@@ -13,88 +13,80 @@ class SemverIntConverter {
 
   constructor(newConfig: Partial<SemverIntConfig>) {
     const newCfg = { ...DefaultConfig, ...newConfig }
-
-    if (newCfg.numMajorDigits < 0) {
-      throw new Error('numMajorDigits must be greater than or equal to zero.')
+    const digitFields = [
+      'numMajorDigits',
+      'numMinorDigits',
+      'numPatchDigits',
+      'numPrereleaseDigits',
+      'numPrereleaseComponentDigits',
+    ] as const
+    for (const field of digitFields) {
+      if (!Number.isInteger(newCfg[field]) || newCfg[field] < 0) {
+        throw new Error(`${field} must be an integer greater than or equal to zero.`)
+      }
     }
-    if (newCfg.numMinorDigits < 0) {
-      throw new Error('numMinorDigits must be greater than or equal to zero.')
-    }
-    if (newCfg.numPatchDigits < 0) {
-      throw new Error('numPatchDigits must be greater than or equal to zero.')
-    }
-    if (newCfg.numPrereleaseDigits < 0) {
-      throw new Error('numPrereleaseDigits must be greater than or equal to zero.')
-    }
-    if (newCfg.numPrereleaseComponentDigits < 0) {
-      throw new Error('numPrereleaseNumericComponentDigits must be greater than or equal to zero.')
+    if (newCfg.maxSemverInt !== undefined && (typeof newCfg.maxSemverInt !== 'bigint' || newCfg.maxSemverInt < 0n)) {
+      throw new Error('maxSemverInt must be a bigint greater than or equal to zero.')
     }
 
     this.cfg = newCfg
   }
 
   public semverToInt(majorStr: string, minorStr: string, patchStr: string, prerelease: string): SemverIntResult {
-    const major = Number(majorStr)
-    const minor = Number(minorStr)
-    const patch = Number(patchStr)
-    if (!isStrictInt(majorStr) || major < 0) {
+    if (!isStrictInt(majorStr)) {
       throw new Error(`major version must be an integer >= 0, got: ${majorStr}`)
     }
-    if (!isStrictInt(minorStr) || minor < 0) {
+    if (!isStrictInt(minorStr)) {
       throw new Error(`minor version must be an integer >= 0`)
     }
-    if (!isStrictInt(patchStr) || patch < 0) {
+    if (!isStrictInt(patchStr)) {
       throw new Error(`patch version must be an integer >= 0`)
     }
 
     let versionStr = ''
     const errs: SemverIntError[] = []
-    const majorResult = fmtLimitSizeNumeric(majorStr, this.cfg.numMajorDigits)
-    versionStr += majorResult.strNum
-    if (majorResult.hasOverflow) {
-      if (this.cfg.majorVersionErrors == 'error') {
-        errs.push(new OverflowError(SemverComponent.Major, majorStr))
+    const coreComponents = [
+      { value: majorStr, digits: this.cfg.numMajorDigits, component: SemverComponent.Major, errors: this.cfg.majorVersionErrors },
+      { value: minorStr, digits: this.cfg.numMinorDigits, component: SemverComponent.Minor, errors: this.cfg.minorVersionErrors },
+      { value: patchStr, digits: this.cfg.numPatchDigits, component: SemverComponent.Patch, errors: this.cfg.patchVersionErrors },
+    ]
+    let hasCoreOverflow = false
+    for (const [index, component] of coreComponents.entries()) {
+      const result =
+        index == 0
+          ? fmtLimitSizeNumeric(component.value, component.digits)
+          : fmtFixedSizeNumeric(component.value, component.digits)
+      versionStr += result.strNum
+      if (result.hasOverflow) {
+        if (component.errors == 'error') {
+          errs.push(new OverflowError(component.component, component.value))
+        }
+        const remainingCoreDigits = coreComponents.slice(index + 1).reduce((total, remaining) => total + remaining.digits, 0)
+        versionStr += '9'.repeat(remainingCoreDigits + this.cfg.numPrereleaseDigits)
+        hasCoreOverflow = true
+        break
       }
-      versionStr += '9'.repeat(this.cfg.numMinorDigits + this.cfg.numPatchDigits + this.cfg.numPrereleaseDigits)
-      return { versionStr, errs }
     }
 
-    const minorResult = fmtFixedSizeNumeric(minorStr, this.cfg.numMinorDigits)
-    versionStr += minorResult.strNum
-    if (minorResult.hasOverflow) {
-      if (this.cfg.minorVersionErrors == 'error') {
-        errs.push(new OverflowError(SemverComponent.Minor, minorStr))
-      }
-      versionStr += '9'.repeat(this.cfg.numPatchDigits + this.cfg.numPrereleaseDigits)
-      return { versionStr, errs }
+    if (!hasCoreOverflow) {
+      const prereleaseResult = prereleaseToInt(
+        prerelease,
+        this.cfg.numPrereleaseDigits,
+        this.cfg.numPrereleaseComponentDigits,
+        this.cfg.firstPrereleaseComponentToDigit,
+      )
+      versionStr += prereleaseResult.strNum
+      errs.push(
+        ...prereleaseResult.errs.filter(
+          err =>
+            (this.cfg.prereleaseErrors == 'error' && err.componentName == SemverComponent.Prerelease) ||
+            (this.cfg.prereleaseNumericComponentErrors == 'error' && err.componentName == SemverComponent.PrereleaseComponent),
+        ),
+      )
     }
 
-    const patchResult = fmtFixedSizeNumeric(patchStr, this.cfg.numPatchDigits)
-    versionStr += patchResult.strNum
-    if (patchResult.hasOverflow) {
-      if (this.cfg.patchVersionErrors == 'error') {
-        errs.push(new OverflowError(SemverComponent.Patch, patchStr))
-      }
-      versionStr += '9'.repeat(this.cfg.numPrereleaseDigits)
-      return { versionStr, errs }
-    }
-
-    const prereleaseResult = prereleaseToInt(
-      prerelease,
-      this.cfg.numPrereleaseDigits,
-      this.cfg.numPrereleaseComponentDigits,
-      this.cfg.firstPrereleaseComponentToDigit,
-    )
-    versionStr += prereleaseResult.strNum
-    errs.push(
-      ...prereleaseResult.errs.filter(
-        err =>
-          (this.cfg.prereleaseErrors == 'error' && err.componentName == SemverComponent.Prerelease) ||
-          (this.cfg.prereleaseNumericComponentErrors == 'error' && err.componentName == SemverComponent.PrereleaseComponent),
-      ),
-    )
-
-    if (this.cfg.maxSemverInt && BigInt(versionStr) > this.cfg.maxSemverInt) {
+    versionStr = versionStr || '0'
+    if (this.cfg.maxSemverInt !== undefined && BigInt(versionStr) > this.cfg.maxSemverInt) {
       errs.push(new OverflowError(SemverComponent.SemverInt, versionStr))
       versionStr = String(this.cfg.maxSemverInt)
     }
