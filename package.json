@@ -37,6 +37,7 @@
     "postbuild": "tsconfig-to-dual-package",
     "validate": "npm run lint && npm run fmt && npm run test",
     "test": "vitest",
+    "test:performance": "node src/test/checkConversionPerformance.mjs",
     "test:watch": "vitest --watch",
     "lint": "eslint",
     "lint:fix": "eslint --fix",

@@ -29,3 +29,44 @@ jobs:
 
       - name: Validate
         run: npm run validate
+
+  performance:
+    name: Check CPU and memory
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Check CPU and memory
+        env:
+          PERFORMANCE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: npm run test:performance -- --base "$PERFORMANCE_BASE_SHA"
+
+      - name: Add performance summary
+        if: always()
+        run: |
+          if [ -f performance-results/summary.md ]; then
+            cat performance-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload performance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: performance-results
+          path: performance-results/
+          if-no-files-found: warn
