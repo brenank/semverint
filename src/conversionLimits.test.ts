@@ -140,6 +140,17 @@ describe('maximum integer clamping', () => {
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
   })
 
+  it.each([
+    [9900009075000000n, '9900009075000000', [integerOverflow]],
+    [9900009075000001n, '9900009075000001', []],
+    [9900009075000002n, '9900009075000001', []],
+  ])('compares adjacent integers exactly beyond the safe Number range at maximum %s', (maximum, expected, errors) => {
+    const converter = new SemverIntConverter({ maxSemverInt: maximum })
+    const result = converter.semverToInt('99', '0', '0', 'rc.1')
+    expect(result.versionStr).toBe(expected)
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
+  })
+
   it('retains prerelease errors before the unconditional overall overflow diagnostic', () => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: 5, maxSemverInt: 100n })
     const result = converter.semverToInt('1', '2', '3', 'abcd')
@@ -264,5 +275,13 @@ describe('public singleton configuration', () => {
     expect(local.semverToInt('1', '2', '3', '')).toEqual({ versionStr: '1020399', errs: [] })
     setGlobalConfig({ numPatchDigits: 3 } satisfies Partial<SemverIntConfig>)
     expect(semverToInt('1', '2', '3', '')).toEqual({ versionStr: '1020039999999999', errs: [] })
+  })
+
+  it('retains the previous singleton configuration when a replacement is invalid', () => {
+    setGlobalConfig({ numPrereleaseDigits: 2 })
+    expect(() => setGlobalConfig({ numPrereleaseDigits: -1 })).toThrow(
+      'numPrereleaseDigits must be greater than or equal to zero.',
+    )
+    expect(semverToInt('1', '2', '3', '')).toEqual({ versionStr: '1020399', errs: [] })
   })
 })
