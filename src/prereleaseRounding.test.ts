@@ -18,6 +18,9 @@ describe('prerelease decimal formatting', () => {
     ['12344', 4, '1234', true],
     ['12345', 4, '1235', true],
     ['12346', 4, '1235', true],
+    ['12995', 4, '1300', true],
+    ['009995', 4, '0100', true],
+    ['19995', 4, '2000', true],
     ['99994', 4, '9999', true],
   ])('formats %s to %s digits using the first discarded digit to round', (input, digits, expected, loss) => {
     expect(fmtFixedSizePrerelease(input, digits)).toEqual({ strNum: expected, hasPrecisionLoss: loss })

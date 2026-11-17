@@ -67,6 +67,22 @@ const prereleaseCharToPrecedence: Record<string, string> = {
   z: '98',
 }
 
+function incrementDecimalString(decimalDigits: string): string {
+  let lastNonNineIndex = decimalDigits.length - 1
+  while (lastNonNineIndex >= 0 && decimalDigits[lastNonNineIndex] == '9') {
+    lastNonNineIndex -= 1
+  }
+  if (lastNonNineIndex < 0) {
+    return '1' + '0'.repeat(decimalDigits.length)
+  }
+
+  // Carry through trailing nines: 1299 becomes 1300, preserving any leading zeros.
+  const prefix = decimalDigits.slice(0, lastNonNineIndex)
+  const incrementedDigit = Number(decimalDigits[lastNonNineIndex]) + 1
+  const numTrailingNines = decimalDigits.length - lastNonNineIndex - 1
+  return prefix + String(incrementedDigit) + '0'.repeat(numTrailingNines)
+}
+
 function fmtFixedSizePrerelease(strNumIn: string, desiredDigits: number): { strNum: string; hasPrecisionLoss: boolean } {
   if (!Number.isInteger(desiredDigits) || desiredDigits <= 0) {
     throw new Error(`desiredLength must be an integer > 0, got ${desiredDigits}`)
@@ -83,14 +99,12 @@ function fmtFixedSizePrerelease(strNumIn: string, desiredDigits: number): { strN
   let strNum = strNumIn.slice(0, desiredDigits)
   const firstDiscardedDigit = strNumIn[desiredDigits]
   if (firstDiscardedDigit >= '5') {
-    // BigInt keeps rounding exact even when the digits exceed Number's precision.
-    const roundedNumber = BigInt(strNum) + 1n
-    const roundedDigits = roundedNumber.toString()
+    const roundedDigits = incrementDecimalString(strNum)
     if (roundedDigits.length > desiredDigits) {
       // Rounding 999 to 1000 must not make the result wider than its digit budget.
       strNum = '9'.repeat(desiredDigits)
     } else {
-      strNum = roundedDigits.padStart(desiredDigits, '0')
+      strNum = roundedDigits
     }
   }
   return { strNum, hasPrecisionLoss: true }
@@ -139,7 +153,10 @@ function prereleaseToInt(
         const numCharacterCodes = Math.max(1, Math.floor(desiredComponentDigits / 2))
         const repeatedCharacterCodes = lowestCharacterCode.repeat(numCharacterCodes)
         const minTextComponent = repeatedCharacterCodes.slice(0, desiredComponentDigits)
-        const maxNumericComponent = (BigInt(minTextComponent) - 1n).toString()
+        const lastDigitIndex = minTextComponent.length - 1
+        const lastDigit = Number(minTextComponent[lastDigitIndex])
+        // The repeated 36 codes end in 3 or 6, so subtracting one never needs a borrow.
+        const maxNumericComponent = minTextComponent.slice(0, lastDigitIndex) + String(lastDigit - 1)
 
         // Compare decimal strings without converting large identifiers to Number.
         // More digits means a larger number; equal-length strings can be compared directly.
@@ -180,12 +197,10 @@ function prereleaseToInt(
 
   const prereleaseResult = fmtFixedSizePrerelease(prereleaseNumber, desiredDigits)
   // Versions without a prerelease label use all nines in this field.
-  const digitsForStableRelease = '9'.repeat(desiredDigits)
-  const matchesStableReleaseDigits = prereleaseResult.strNum == digitsForStableRelease
+  const matchesStableReleaseDigits = /^9+$/.test(prereleaseResult.strNum)
   if (matchesStableReleaseDigits) {
-    // A prerelease must sort below the same version without a prerelease label.
-    const largestPrereleaseNumber = BigInt(digitsForStableRelease) - 1n
-    prereleaseResult.strNum = largestPrereleaseNumber.toString()
+    // Stay below the stable release by replacing its final nine with eight: 999 becomes 998.
+    prereleaseResult.strNum = prereleaseResult.strNum.slice(0, -1) + '8'
   }
   if (prereleaseResult.hasPrecisionLoss || hasUnprocessedComponents || matchesStableReleaseDigits) {
     errs.push(new PrecisionLossError(SemverComponent.Prerelease, prerelease))

@@ -52,7 +52,8 @@ console.log(semverToInt('2', '98', '5', '').versionStr)
 // 298059999999999
 ```
 
-Compare large `versionStr` values with `BigInt` to avoid losing precision through JavaScript's `Number`.
+Compare large `versionStr` values with `BigInt` to avoid losing precision through JavaScript's `Number`. Basic conversion returns
+decimal strings on runtimes with or without `BigInt`. The optional `maxSemverInt` configuration requires `BigInt`.
 
 ### Errors
 
