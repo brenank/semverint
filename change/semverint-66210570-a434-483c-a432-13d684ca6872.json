@@ -1,0 +1,7 @@
+{
+  "packageName": "semverint",
+  "type": "none",
+  "comment": "test: cover package compatibility with and without BigInt",
+  "email": "brenankly@gmail.com",
+  "dependentChangeType": "none"
+}

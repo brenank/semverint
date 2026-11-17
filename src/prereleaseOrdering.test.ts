@@ -4,6 +4,15 @@ import { SemverIntConverter } from './converter.js'
 import { prereleaseToInt } from './prereleaseUtils.js'
 
 describe('ordering within budgets, compared as exact integers', () => {
+  it('distinguishes adjacent prerelease values beyond safe Number precision', () => {
+    const converter = new SemverIntConverter({})
+    const lower = converter.semverToInt('99', '0', '0', 'rc.0')
+    const higher = converter.semverToInt('99', '0', '0', 'rc.1')
+    expect(lower).toEqual({ versionStr: '9900009075000000', errs: [] })
+    expect(higher).toEqual({ versionStr: '9900009075000001', errs: [] })
+    expect(BigInt(lower.versionStr)).toBeLessThan(BigInt(higher.versionStr))
+  })
+
   it('preserves numeric magnitude, numeric-before-text, ASCII case, and text prefix order for these non-overflowing identifiers', () => {
     const cases = [
       ['0', '0000000000000000'],
