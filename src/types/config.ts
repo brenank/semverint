@@ -15,7 +15,7 @@ interface SemverIntConfig {
   // Override mapping of the first prerelease component to a single digit
   // semver digit will be the index+1 of the matching string
   // semver digit will be 0 if no matches
-  // further prerelease components are converted to ascii codes (2 digits per character)
+  // further prerelease components use numeric encoding for numbers and two-digit character codes for text
   // Note: this may not adhere to semver spec depending on what is passed in
   firstPrereleaseComponentToDigit?: [string, string, string, string, string, string, string, string, string]
 }

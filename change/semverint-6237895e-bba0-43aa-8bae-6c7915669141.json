@@ -1,7 +1,7 @@
 {
   "packageName": "semverint",
   "type": "patch",
-  "comment": "fix: process prerelease suffixes and report overflow and precision loss",
+  "comment": "fix: process prerelease suffixes, report conversion loss, and round exactly in decimal. These fixes can change stored integer encodings; recompute affected values when upgrading.",
   "email": "brenankly@gmail.com",
   "dependentChangeType": "patch"
 }
