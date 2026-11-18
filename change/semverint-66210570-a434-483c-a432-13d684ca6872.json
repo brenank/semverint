@@ -1,0 +1,7 @@
+{
+  "packageName": "semverint",
+  "type": "none",
+  "comment": "test: cover runtime compatibility and CPU/memory budgets",
+  "email": "brenankly@gmail.com",
+  "dependentChangeType": "none"
+}

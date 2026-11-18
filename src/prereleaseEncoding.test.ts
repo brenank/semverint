@@ -41,6 +41,16 @@ describe('issue #10 current behavior: the first numeric identifier discards the 
 
 describe('current prerelease identifier processing', () => {
   it.each([
+    ['1e2', '1020337773800000000000000'],
+    ['0x10', '1020336963736000000000000'],
+    ['01a', '1020336377300000000000000'],
+    ['00-', '1020336364600000000000000'],
+  ])('encodes numeric-looking identifier %s as text', (prerelease, expected) => {
+    const converter = new SemverIntConverter({ numPrereleaseDigits: 20, numPrereleaseComponentDigits: 16 })
+    expect(converter.semverToInt('1', '2', '3', prerelease)).toEqual({ versionStr: expected, errs: [] })
+  })
+
+  it.each([
     ['1.alpha', '0000010000'],
     ['1.2.alpha', '0000010000'],
     ['a.1.b', '7300000100'],
