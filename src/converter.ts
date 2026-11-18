@@ -84,6 +84,7 @@ class SemverIntConverter {
       this.cfg.numPrereleaseDigits,
       this.cfg.numPrereleaseComponentDigits,
       this.cfg.firstPrereleaseComponentToDigit,
+      this.cfg.prereleaseNumericComponentErrors == 'error',
     )
     versionStr += prereleaseResult.strNum
     errs.push(

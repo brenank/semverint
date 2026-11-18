@@ -115,6 +115,7 @@ function prereleaseToInt(
   desiredDigits: number,
   desiredComponentDigits: number,
   firstPrereleaseComponentToDigit?: [string, string, string, string, string, string, string, string, string],
+  reportComponentErrors = true,
 ): {
   strNum: string
   errs: SemverIntError[]
@@ -186,7 +187,9 @@ function prereleaseToInt(
 
     if (hasComponentOverflow) {
       prereleaseNumber = prereleaseNumber.padEnd(desiredDigits, '9')
-      errs.push(new OverflowError(SemverComponent.PrereleaseComponent, component))
+      if (reportComponentErrors) {
+        errs.push(new OverflowError(SemverComponent.PrereleaseComponent, component))
+      }
     }
 
     if (hasComponentOverflow || prereleaseNumber.length >= desiredDigits) {
