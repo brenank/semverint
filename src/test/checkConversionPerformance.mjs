@@ -1,3 +1,15 @@
+/**
+ * Run npm run test:performance -- --base origin/main [--output <directory>].
+ * The base Git ref must exist locally; CI supplies the PR base SHA.
+ *
+ * Compares the working tree and base in isolated Node processes. Workloads and
+ * regression limits live in performanceCases.mjs; memory checks sample heap
+ * growth and peak RSS.
+ *
+ * Writes results.json and summary.md to performance-results/ by default.
+ * Budget violations, invalid samples, and unexpected failures exit nonzero;
+ * worker failures preserve partial reports. Inspect reports before changing limits.
+ */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
