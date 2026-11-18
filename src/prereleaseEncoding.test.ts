@@ -48,6 +48,16 @@ describe('prerelease identifier processing', () => {
   })
 
   it.each([
+    ['1e2', '1020337773800000000000000'],
+    ['0x10', '1020336963736000000000000'],
+    ['01a', '1020336377300000000000000'],
+    ['00-', '1020336364600000000000000'],
+  ])('encodes numeric-looking identifier %s as text', (prerelease, expected) => {
+    const converter = new SemverIntConverter({ numPrereleaseDigits: 20, numPrereleaseComponentDigits: 16 })
+    expect(converter.semverToInt('1', '2', '3', prerelease)).toEqual({ versionStr: expected, errs: [] })
+  })
+
+  it.each([
     ['1.alpha', '0000017385', [componentOverflow, precisionLoss]],
     ['1.2.alpha', '0000010000', [precisionLoss]],
     ['a.1.b', '7300000174', []],
@@ -194,9 +204,7 @@ describe('exact numeric prerelease limits', () => {
     ['1000000000000000000000', '100000000000000000000000000000'],
     ['999999999999999900000', '099999999999999990000000000000'],
   ])('preserves decimal digits for numeric identifier %s around the Number exponent boundary', (input, expected) => {
-    const result = prereleaseToInt(input, 30, 22)
-    expect(result).toEqual({ strNum: expected, errs: [] })
-    expect(result.strNum).toMatch(/^\d{30}$/)
+    expect(prereleaseToInt(input, 30, 22)).toEqual({ strNum: expected, errs: [] })
   })
 
   it('returns a decimal public version string beyond the Number exponent boundary', () => {
