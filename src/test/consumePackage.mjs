@@ -22,18 +22,18 @@ const precisionLoss = { name: 'PrecisionLossError', componentName: 'prerelease' 
 const majorOverflow = { name: 'OverflowError', componentName: 'major' }
 const cases = [
   ['stable release', {}, ['1', '2', '3', ''], '102039999999999', []],
-  ['numeric prerelease', {}, ['1', '2', '3', '123'], '102030001230000', []],
-  ['text prerelease', {}, ['1', '2', '3', 'a'], '102037300000000', []],
-  ['rounds down', { numPrereleaseDigits: 5 }, ['1', '2', '3', '14'], '1020300001', [precisionLoss]],
-  ['rounds up', { numPrereleaseDigits: 5 }, ['1', '2', '3', '16'], '1020300002', [precisionLoss]],
+  ['numeric prerelease', {}, ['1', '2', '3', '123'], '102031312300000', []],
+  ['text prerelease', {}, ['1', '2', '3', 'a'], '102032380000000', []],
+  ['rounds down', { numPrereleaseDigits: 5 }, ['1', '2', '3', '1234'], '1020314123', [precisionLoss]],
+  ['rounds up', { numPrereleaseDigits: 5 }, ['1', '2', '3', '1236'], '1020314124', [precisionLoss]],
   ['core overflow', {}, ['100', '2', '3', 'a'], '9999999999999999', [majorOverflow]],
   ['large core integer', { numMajorDigits: 16 }, ['9007199254740993', '0', '0', ''], '900719925474099300009999999999', []],
 ]
 
 if (bigInt === 'available') {
-  const config = { maxSemverInt: 9900009075000000n }
+  const config = { maxSemverInt: 9900002554000110n }
   const integerOverflow = { name: 'OverflowError', componentName: 'semverint' }
-  cases.push(['maximum cap', config, ['99', '0', '0', 'rc.1'], '9900009075000000', [integerOverflow]])
+  cases.push(['maximum cap', config, ['99', '0', '0', 'rc.1'], '9900002554000110', [integerOverflow]])
 }
 
 function describeResult({ versionStr, errs }) {

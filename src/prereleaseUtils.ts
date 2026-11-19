@@ -1,70 +1,13 @@
 import { isStrictInt } from './numericUtils.js'
 import { OverflowError, PrecisionLossError, SemverComponent, SemverIntError } from './types/errors.js'
 
-const prereleaseCharToPrecedence: Record<string, string> = {
-  '0': '36',
-  '1': '37',
-  '2': '38',
-  '3': '39',
-  '4': '40',
-  '5': '41',
-  '6': '42',
-  '7': '43',
-  '8': '44',
-  '9': '45',
-  '-': '46',
-  A: '47',
-  B: '48',
-  C: '49',
-  D: '50',
-  E: '51',
-  F: '52',
-  G: '53',
-  H: '54',
-  I: '55',
-  J: '56',
-  K: '57',
-  L: '58',
-  M: '59',
-  N: '60',
-  O: '61',
-  P: '62',
-  Q: '63',
-  R: '64',
-  S: '65',
-  T: '66',
-  U: '67',
-  V: '68',
-  W: '69',
-  X: '70',
-  Y: '71',
-  Z: '72',
-  a: '73',
-  b: '74',
-  c: '75',
-  d: '76',
-  e: '77',
-  f: '78',
-  g: '79',
-  h: '80',
-  i: '81',
-  j: '82',
-  k: '83',
-  l: '84',
-  m: '85',
-  n: '86',
-  o: '87',
-  p: '88',
-  q: '89',
-  r: '90',
-  s: '91',
-  t: '92',
-  u: '93',
-  v: '94',
-  w: '95',
-  x: '96',
-  y: '97',
-  z: '98',
+const prereleaseAlphabet = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+// Reserve 00 for the end of a text identifier so a prefix sorts before any extension.
+const prereleaseCharToPrecedence: Record<string, string> = {}
+for (let index = 0; index < prereleaseAlphabet.length; index++) {
+  const char = prereleaseAlphabet[index]
+  const rankDigits = String(index + 1).padStart(2, '0')
+  prereleaseCharToPrecedence[char] = rankDigits
 }
 
 function incrementDecimalString(decimalDigits: string): string {
@@ -123,17 +66,16 @@ function prereleaseToInt(
   let prereleaseNumber = ''
   const errs: SemverIntError[] = []
 
-  if (!prerelease || prerelease == '') {
+  if (!prerelease) {
     return { strNum: '9'.repeat(desiredDigits), errs }
   }
 
   if (desiredDigits == 0) {
-    if (prerelease.length > 0) {
-      errs.push(new OverflowError(SemverComponent.Prerelease, prerelease))
-    }
+    errs.push(new OverflowError(SemverComponent.Prerelease, prerelease))
     return { strNum: '', errs }
   }
 
+  const numericLengthWidth = String(desiredComponentDigits).length
   const components = prerelease.split('.')
   let hasUnprocessedComponents = false
   for (const [i, component] of components.entries()) {
@@ -142,47 +84,32 @@ function prereleaseToInt(
       const firstDigit = firstPrereleaseComponentToDigit.findIndex(v => v == component) + 1
       prereleaseNumber += firstDigit
     } else if (isStrictInt(component)) {
-      if (!Number.isInteger(desiredComponentDigits) || desiredComponentDigits < 0) {
-        throw new Error(`desiredLength must be an integer >= 0, got ${desiredComponentDigits}`)
-      }
-      if (desiredComponentDigits == 0) {
-        hasComponentOverflow = true
-      } else {
-        // Numeric identifiers must stay below the character codes. Keep the existing
-        // limit calculation, including odd widths, so stored encodings stay compatible.
-        const lowestCharacterCode = prereleaseCharToPrecedence['0']
-        const numCharacterCodes = Math.max(1, Math.floor(desiredComponentDigits / 2))
-        const repeatedCharacterCodes = lowestCharacterCode.repeat(numCharacterCodes)
-        const minTextComponent = repeatedCharacterCodes.slice(0, desiredComponentDigits)
-        const lastDigitIndex = minTextComponent.length - 1
-        const lastDigit = Number(minTextComponent[lastDigitIndex])
-        // The repeated 36 codes end in 3 or 6, so subtracting one never needs a borrow.
-        const maxNumericComponent = minTextComponent.slice(0, lastDigitIndex) + String(lastDigit - 1)
-
-        // Compare decimal strings without converting large identifiers to Number.
-        // More digits means a larger number; equal-length strings can be compared directly.
-        if (component.length > maxNumericComponent.length) {
-          hasComponentOverflow = true
-        } else if (component.length == maxNumericComponent.length) {
-          hasComponentOverflow = component > maxNumericComponent
-        }
-
-        let numericDigits = component
-        if (hasComponentOverflow) {
-          numericDigits = maxNumericComponent
-        }
-        prereleaseNumber += numericDigits.padStart(desiredComponentDigits, '0')
-      }
-    } else {
-      let asciiComponent = ''
-      for (const char of component) {
-        asciiComponent += prereleaseCharToPrecedence[char]
-      }
-      hasComponentOverflow = asciiComponent.length > desiredComponentDigits
+      hasComponentOverflow = component.length > desiredComponentDigits
+      let numericDigits = component
       if (hasComponentOverflow) {
-        asciiComponent = asciiComponent.slice(0, desiredComponentDigits)
+        numericDigits = '9'.repeat(desiredComponentDigits)
       }
-      prereleaseNumber += asciiComponent
+      // Compare digit counts before payloads to preserve numeric magnitude without parsing the identifier.
+      const digitCount = String(numericDigits.length).padStart(numericLengthWidth, '0')
+      prereleaseNumber += '1' + digitCount + numericDigits
+    } else {
+      hasComponentOverflow = component.length * 2 > desiredComponentDigits
+      const charsToEncode = Math.min(component.length, Math.ceil(desiredComponentDigits / 2))
+      let textDigits = ''
+      for (let charIndex = 0; charIndex < charsToEncode; charIndex++) {
+        const char = component[charIndex]
+        const rankDigits = prereleaseCharToPrecedence[char]
+        if (rankDigits === undefined) {
+          throw new Error(`prerelease identifier must contain only ASCII letters, digits, or hyphens, got: ${component}`)
+        }
+        textDigits += rankDigits
+      }
+      if (hasComponentOverflow) {
+        textDigits = textDigits.slice(0, desiredComponentDigits)
+      } else {
+        textDigits += '00'
+      }
+      prereleaseNumber += '2' + textDigits
     }
 
     if (hasComponentOverflow) {

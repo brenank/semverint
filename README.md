@@ -44,10 +44,10 @@ console.log(semverToInt('1', '2', '3', 'zzz').versionStr)
 console.log(semverToInt('1', '2', '3', '').versionStr)
 console.log(semverToInt('2', '98', '5', '').versionStr)
 
-// 102037384889999
-// 102037477929999
-// 102039075000001
-// 102039898980000
+// 102032384953999
+// 102032394257999
+// 102032554000111
+// 102032636363000
 // 102039999999999
 // 298059999999999
 ```
@@ -79,9 +79,25 @@ appear equal when compared as integers.
 version values, and handle overflow errors as needed for your application. Numeric prerelease identifiers continue through the
 remaining identifiers; identifiers clipped to the numeric ceiling report component overflow.
 
-The existing prerelease encoding can still alias identifier boundaries and trailing zero identifiers (for example, `ab` and `a.b`,
-or `a` and `a.0`). Its character codes also differ from ASCII order for `-` and digits. Returned diagnostics do not cover all such
-collisions or ordering differences.
+With sufficient digit budgets, the encoding preserves numeric magnitude, ASCII text order, and identifier boundaries. Limited
+budgets and custom first-identifier mappings can still cause different versions to share an integer.
+
+### v3 encoding and upgrades
+
+Each numeric prerelease identifier contains a `1` marker, its decimal digit count, and its digits. Each text identifier contains a
+`2` marker, two-digit character ranks in ASCII order, and a `00` terminator. The ranks start at `01`, reserving `00` for
+boundaries. The numeric digit count is padded to the width needed to represent `numPrereleaseComponentDigits`.
+
+For example, with a component budget of six digits, `1` encodes as `111`, `10` as `1210`, and `a` as `23800`, before padding to
+the total prerelease width. These markers and boundaries distinguish `a` from `a.0`, and `ab` from `a.b`.
+
+The v3 encoding and defaults are stable across patch and minor releases. Use the same major version and configuration for every
+set of integers you compare.
+
+When upgrading from v2, recompute stored integers from their original SemVer values using your v3 configuration, then rebuild any
+indexes or derived values. The old integers alone cannot reliably recover the original versions. Keep the original SemVer values
+alongside stored integers for future migrations. Review digit budgets and conversion errors during the upgrade: identifier markers
+and boundaries also consume the total prerelease budget.
 
 ### Set Global Configuration
 
@@ -108,12 +124,16 @@ The converter uses a configuration object (`SemverIntConfig`) to customize how v
 #### Digits
 
 - `numMajorDigits`, `numMinorDigits`, `numPatchDigits`, `numPrereleaseDigits`, `numPrereleaseComponentDigits`: The number of
-  digits reserved for each version component.
+  digits reserved for each version component. Each budget must be a nonnegative safe integer, and the combined major, minor,
+  patch, and prerelease width must be positive and safe.
 - `numPrereleaseComponentDigits`: Specifies the number of digits allocated to each component within a prerelease string (split by
-  `.`). For instance, with `numPrereleaseComponentDigits = 4` and `numPrereleaseDigits = 8`, `rc.1` produces the prerelease field
-  `'90750001'`.
+  `.`). It limits the numeric payload digits or text character-code digits. Markers, numeric lengths, and text terminators count
+  toward `numPrereleaseDigits` separately. For instance, with `numPrereleaseComponentDigits = 4` and `numPrereleaseDigits = 10`,
+  `rc.1` produces the prerelease field `'2554000111'`.
 - `firstPrereleaseComponentToDigit`: Optional mapping of the first prerelease component to a specific digit.
-- `maxSemverInt`: Optional maximum integer limit for the entire converted SemVer.
+- `maxSemverInt`: Optional nonnegative `bigint` capacity of the destination system. Every result above this value, including core
+  overflow results, is clamped to it and reports overall overflow. Zero is a valid limit; negative values and other types are
+  rejected.
 
 #### Error Handling
 
@@ -128,7 +148,7 @@ You can create a custom configuration by passing a partial config to the `setGlo
 This configuration allows mapping the first prerelease component to a single-digit number. This is useful if you only use a small
 set of prerelease components, to support compacting the prerelease integer size. The digit will be the index+1 of the matching
 string in the array. If a component doesn't match any string in the array, it will be assigned a digit of 0. Subsequent prerelease
-components use numeric encoding for numeric identifiers and two-digit character codes for text identifiers.
+components retain their numeric/text markers, lengths, and boundaries.
 
 Important: Depending on what is passed in firstPrereleaseComponentToDigit, this mapping may not adhere strictly to the standard
 SemVer specification. Custom mappings can introduce behaviors that diverge from the conventional ordering and interpretation of
@@ -155,7 +175,7 @@ const localConfig: Partial<SemverIntConfig> = {
 const localConverter = new SemverIntConverter(localConfig)
 
 const result = localConverter.semverToInt('1', '2', '3', 'beta.1')
-console.log(result.versionStr) // 102037477927300000001
+console.log(result.versionStr) // 102032394257380011100
 ```
 
 By creating a local instance, you can control configurations for specific tasks or threads, isolating them from the global
@@ -165,9 +185,6 @@ converter.
 
 **Important:** When using multiple instances of `SemverIntConverter`, ensure that all instances use the same integer settings
 (`numMajorDigits`, `numMinorDigits`, `numPatchDigits`, and `numPrereleaseDigits`).
-
-Compare stored integers generated by the same library version and configuration. Recompute affected stored values when upgrading
-to a release that changes their encoding.
 
 ### Why This Matters
 

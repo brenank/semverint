@@ -90,10 +90,10 @@ describe('prerelease decimal formatting', () => {
   })
 })
 
-describe('zero rounding through conversion APIs', () => {
-  it('returns decimal zeros with a precision-loss descriptor when a numeric zero component exceeds the total budget', () => {
+describe('rounding numeric zero through conversion APIs', () => {
+  it('reports precision loss when the numeric payload is a discarded zero', () => {
     const result = prereleaseToInt('0', 2, 6)
-    expect(result.strNum).toBe('00')
+    expect(result.strNum).toBe('11')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
       { name: 'PrecisionLossError', componentName: 'prerelease' },
     ])
@@ -102,7 +102,7 @@ describe('zero rounding through conversion APIs', () => {
   it('produces a decimal version string for truncated numeric zero', () => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: 2 })
     const result = converter.semverToInt('1', '2', '3', '0')
-    expect(result.versionStr).toBe('1020300')
+    expect(result.versionStr).toBe('1020311')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
       { name: 'PrecisionLossError', componentName: 'prerelease' },
     ])

@@ -63,11 +63,6 @@ describe('when prerelease_errors', () => {
   testSemverToIntWithTestName(converter, 'semvers.txt', 'prerelease_errors')
 })
 
-describe('when no_all', () => {
-  const converter = new SemverIntConverter({ numMajorDigits: 0, numMinorDigits: 0, numPatchDigits: 0, numPrereleaseDigits: 0 })
-  testSemverToIntWithTestName(converter, 'semvers.txt', 'no_all')
-})
-
 describe('when no_major', () => {
   const converter = new SemverIntConverter({ numMajorDigits: 0 })
   testSemverToIntWithTestName(converter, 'semvers.txt', 'no_major')
