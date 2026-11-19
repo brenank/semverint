@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { SemverIntConverter } from './converter.js'
 import { prereleaseToInt } from './prereleaseUtils.js'
+import { convertVersion } from './test/convertVersion.js'
 import { SemverIntConfig } from './types/config.js'
 
 const mapping: SemverIntConfig['firstPrereleaseComponentToDigit'] = [
@@ -21,38 +22,61 @@ const precisionLoss = { name: 'PrecisionLossError', componentName: 'prerelease' 
 
 describe('issue #10: process numeric identifier tails and diagnose insufficient total space', () => {
   it.each([
-    [10, 'a.1', '2380011100', []],
-    [10, 'a.1.a', '2380011124', [precisionLoss]],
-    [10, '0.1', '1101110000', []],
-    [10, '0.2', '1101120000', []],
-    [10, 'rc.1', '2554000111', []],
-    [10, 'rc.1.1', '2554000111', [precisionLoss]],
-    [16, 'rc.1', '2554000111000000', []],
-    [16, 'rc.1.1', '2554000111111000', []],
-    [16, 'rc.1.2', '2554000111112000', []],
-    [16, '1', '1110000000000000', []],
-    [16, '1.1', '1111110000000000', []],
-    [16, '1.2', '1111120000000000', []],
-  ])('%s prerelease digits: %s encodes its prerelease as %s', (digits, prerelease, expected, errors) => {
+    [10, '1.2.3-a.1', '102032380011100', []],
+    [10, '1.2.3-a.1.a', '102032380011124', [precisionLoss]],
+    [10, '1.2.3-0.1', '102031101110000', []],
+    [10, '1.2.3-0.2', '102031101120000', []],
+    [10, '1.2.3-rc.1', '102032554000111', []],
+    [10, '1.2.3-rc.1.1', '102032554000111', [precisionLoss]],
+    [16, '1.2.3-rc.1', '102032554000111000000', []],
+    [16, '1.2.3-rc.1.1', '102032554000111111000', []],
+    [16, '1.2.3-rc.1.2', '102032554000111112000', []],
+    [16, '1.2.3-1', '102031110000000000000', []],
+    [16, '1.2.3-1.1', '102031111110000000000', []],
+    [16, '1.2.3-1.2', '102031111120000000000', []],
+  ])('%s prerelease digits: %s encodes as %s', (digits, version, expected, errors) => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: digits })
-    const result = converter.semverToInt('1', '2', '3', prerelease)
-    expect(result.versionStr).toBe(`10203${expected}`)
+    const result = convertVersion(converter, version)
+    expect(result.versionStr).toBe(expected)
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
+  })
+})
+
+describe('prerelease digit encoding', () => {
+  it.each([
+    ['0', '110'],
+    ['1', '111'],
+    ['2', '112'],
+    ['9', '119'],
+    ['10', '1210'],
+    ['35', '1235'],
+    ['100', '13100'],
+    ['999999', '16999999'],
+    ['-', '20100'],
+    ['0a', '2023800'],
+    ['A', '21200'],
+    ['Z', '23700'],
+    ['a', '23800'],
+    ['a0', '2380200'],
+    ['aa', '2383800'],
+    ['ab', '2383900'],
+    ['b', '23900'],
+    ['z', '26300'],
+    ['', '9999999999999999'],
+  ])('encodes identifier %j with payload %s in a sixteen-digit budget', (prerelease, expected) => {
+    expect(prereleaseToInt(prerelease, 16, 6)).toEqual({ strNum: expected.padEnd(16, '0'), errs: [] })
   })
 })
 
 describe('prerelease identifier processing', () => {
   it.each([
-    ['1e2', '203420400'],
-    ['0x10', '20261030200'],
-    ['01a', '202033800'],
-    ['00-', '202020100'],
-  ])('encodes numeric-looking identifier %s as text', (prerelease, expected) => {
+    ['1.2.3-1e2', '1020320342040000000000000'],
+    ['1.2.3-0x10', '1020320261030200000000000'],
+    ['1.2.3-01a', '1020320203380000000000000'],
+    ['1.2.3-00-', '1020320202010000000000000'],
+  ])('encodes the numeric-looking identifier in %s as text', (version, expected) => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: 20, numPrereleaseComponentDigits: 16 })
-    expect(converter.semverToInt('1', '2', '3', prerelease)).toEqual({
-      versionStr: `10203${expected.padEnd(20, '0')}`,
-      errs: [],
-    })
+    expect(convertVersion(converter, version)).toEqual({ versionStr: expected, errs: [] })
   })
 
   it.each([
@@ -63,6 +87,8 @@ describe('prerelease identifier processing', () => {
     ['a.b.c', '2380023900', [precisionLoss]],
     ['1a.2.z', '2033800112', [precisionLoss]],
     ['0a', '2023800000', []],
+    ['a.z', '2380026300', []],
+    ['aa', '2383800000', []],
   ])('encodes mixed identifiers in %s as %s', (prerelease, expected, errors) => {
     const result = prereleaseToInt(prerelease, 10, 6)
     expect(result.strNum).toBe(expected)
@@ -203,7 +229,7 @@ describe('exact numeric prerelease limits', () => {
 
   it('returns a decimal public version string beyond the Number exponent boundary', () => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: 30, numPrereleaseComponentDigits: 22 })
-    expect(converter.semverToInt('1', '2', '3', '1000000000000000000000')).toEqual({
+    expect(convertVersion(converter, '1.2.3-1000000000000000000000')).toEqual({
       versionStr: '10203122100000000000000000000000000',
       errs: [],
     })
@@ -215,7 +241,7 @@ describe('exact numeric prerelease limits', () => {
       numPrereleaseComponentDigits: 22,
       maxSemverInt: 10203099999999999999999999999999999n,
     })
-    const result = converter.semverToInt('1', '2', '3', '1000000000000000000000')
+    const result = convertVersion(converter, '1.2.3-1000000000000000000000')
     expect(result.versionStr).toBe('10203099999999999999999999999999999')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
       { name: 'OverflowError', componentName: 'semverint' },

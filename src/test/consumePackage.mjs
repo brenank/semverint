@@ -22,6 +22,7 @@ const precisionLoss = { name: 'PrecisionLossError', componentName: 'prerelease' 
 const majorOverflow = { name: 'OverflowError', componentName: 'major' }
 const cases = [
   ['stable release', {}, ['1', '2', '3', ''], '102039999999999', []],
+  ['omitted prerelease argument', {}, ['1', '2', '3'], '102039999999999', []],
   ['numeric prerelease', {}, ['1', '2', '3', '123'], '102031312300000', []],
   ['text prerelease', {}, ['1', '2', '3', 'a'], '102032380000000', []],
   ['rounds down', { numPrereleaseDigits: 5 }, ['1', '2', '3', '1234'], '1020314123', [precisionLoss]],

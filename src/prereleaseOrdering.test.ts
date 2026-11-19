@@ -2,78 +2,105 @@ import semver from 'semver'
 import { describe, expect, it } from 'vitest'
 
 import { SemverIntConverter } from './converter.js'
-import { prereleaseToInt } from './prereleaseUtils.js'
+import { convertVersion } from './test/convertVersion.js'
+import type { SemverIntConfig } from './types/config.js'
 
-describe('ordering within budgets, compared as exact integers', () => {
+const orderingCases = [
+  {
+    name: 'additional prerelease identifiers increase precedence before the stable release',
+    config: { numPrereleaseDigits: 32, numPrereleaseComponentDigits: 12 },
+    versions: ['1.2.3-alpha', '1.2.3-alpha.1', '1.2.3'],
+  },
+  {
+    name: 'numeric prerelease identifiers compare by magnitude',
+    config: { numPrereleaseDigits: 24, numPrereleaseComponentDigits: 8 },
+    versions: ['1.2.3-rc.2', '1.2.3-rc.10', '1.2.3-rc.100'],
+  },
+  {
+    name: 'numeric prerelease identifiers precede text identifiers',
+    config: { numPrereleaseDigits: 24, numPrereleaseComponentDigits: 8 },
+    versions: ['1.2.3-100', '1.2.3-0a', '1.2.3-a'],
+  },
+  {
+    name: 'text prerelease identifiers compare by ASCII case',
+    config: { numPrereleaseDigits: 24, numPrereleaseComponentDigits: 8 },
+    versions: ['1.2.3-A', '1.2.3-Z', '1.2.3-a', '1.2.3-z'],
+  },
+  {
+    name: 'a text prerelease identifier precedes a longer identifier with the same prefix',
+    config: { numPrereleaseDigits: 24, numPrereleaseComponentDigits: 8 },
+    versions: ['1.2.3-a', '1.2.3-a0', '1.2.3-aa', '1.2.3-ab', '1.2.3-b'],
+  },
+  {
+    name: 'the first text identifier decides precedence before later identifiers',
+    config: { numPrereleaseDigits: 10, numPrereleaseComponentDigits: 6 },
+    versions: ['1.2.3-a.z', '1.2.3-aa'],
+  },
+  {
+    name: 'a hyphen sorts before digits in text prerelease identifiers',
+    config: { numPrereleaseDigits: 10, numPrereleaseComponentDigits: 6 },
+    versions: ['1.2.3--', '1.2.3-0a'],
+  },
+  {
+    name: 'core versions compare by major, then minor, then patch',
+    config: {},
+    versions: ['1.2.3', '1.2.4', '1.3.0', '2.0.0', '10.0.0'],
+  },
+  {
+    name: 'stable and prerelease versions preserve precedence across core carries',
+    config: { numPrereleaseDigits: 16 },
+    versions: ['0.99.99', '1.0.0-0', '1.0.0-a', '1.0.0', '1.0.1-0', '1.1.0-0', '2.0.0-0'],
+  },
+]
+
+function expectVersionsInOrder(config: Partial<SemverIntConfig>, versions: string[]) {
+  const converter = new SemverIntConverter(config)
+  const configDescription = JSON.stringify(config)
+  const results = versions.map(version => {
+    const result = convertVersion(converter, version)
+    expect(result.errs, `${version} encodes as ${result.versionStr} with config ${configDescription}`).toEqual([])
+    return { version, integer: result.versionStr }
+  })
+
+  for (let i = 1; i < results.length; i++) {
+    const earlier = results[i - 1]
+    const later = results[i]
+    expect(
+      BigInt(earlier.integer),
+      `${earlier.version} (${earlier.integer}) should precede ${later.version} (${later.integer}) with config ${configDescription}`,
+    ).toBeLessThan(BigInt(later.integer))
+  }
+}
+
+describe('SemVer precedence within digit budgets', () => {
+  for (const { name, config, versions } of orderingCases) {
+    it(name, () => {
+      expectVersionsInOrder(config, versions)
+    })
+  }
+
   it('distinguishes adjacent prerelease values beyond safe Number precision', () => {
     const converter = new SemverIntConverter({})
-    const lower = converter.semverToInt('99', '0', '0', 'rc.0')
-    const higher = converter.semverToInt('99', '0', '0', 'rc.1')
-    expect(lower).toEqual({ versionStr: '9900002554000110', errs: [] })
-    expect(higher).toEqual({ versionStr: '9900002554000111', errs: [] })
-    expect(BigInt(lower.versionStr)).toBeLessThan(BigInt(higher.versionStr))
+    const zeroVersion = '99.0.0-rc.0'
+    const earlierVersion = '99.0.0-rc.1'
+    const laterVersion = '99.0.0-rc.2'
+    const zero = convertVersion(converter, zeroVersion)
+    const earlier = convertVersion(converter, earlierVersion)
+    const later = convertVersion(converter, laterVersion)
+    expect(zero, zeroVersion).toEqual({ versionStr: '9900002554000110', errs: [] })
+    expect(earlier, earlierVersion).toEqual({ versionStr: '9900002554000111', errs: [] })
+    expect(later, laterVersion).toEqual({ versionStr: '9900002554000112', errs: [] })
+    expect(
+      BigInt(zero.versionStr),
+      `${zeroVersion} (${zero.versionStr}) should precede ${earlierVersion} (${earlier.versionStr}) with config {}`,
+    ).toBeLessThan(BigInt(earlier.versionStr))
+    // Keep the pair sensitive to accidentally comparing as Numbers.
+    expect(Number(earlier.versionStr)).toBe(Number(later.versionStr))
+    expect(
+      BigInt(earlier.versionStr),
+      `${earlierVersion} (${earlier.versionStr}) should precede ${laterVersion} (${later.versionStr}) with config {}`,
+    ).toBeLessThan(BigInt(later.versionStr))
   })
-
-  it('preserves numeric magnitude, numeric-before-text, ASCII case, and text prefix order for these non-overflowing identifiers', () => {
-    const cases = [
-      ['0', '110'],
-      ['1', '111'],
-      ['2', '112'],
-      ['9', '119'],
-      ['10', '1210'],
-      ['35', '1235'],
-      ['100', '13100'],
-      ['999999', '16999999'],
-      ['-', '20100'],
-      ['0a', '2023800'],
-      ['A', '21200'],
-      ['Z', '23700'],
-      ['a', '23800'],
-      ['a0', '2380200'],
-      ['aa', '2383800'],
-      ['ab', '2383900'],
-      ['b', '23900'],
-      ['z', '26300'],
-      ['', '9999999999999999'],
-    ]
-    let previous = -1n
-    for (const [prerelease, expected] of cases) {
-      const result = prereleaseToInt(prerelease, 16, 6)
-      expect(result).toEqual({ strNum: expected.padEnd(16, '0'), errs: [] })
-      const value = BigInt(result.strNum)
-      expect(value).toBeGreaterThan(previous)
-      previous = value
-    }
-  })
-
-  it('preserves stable release, patch, minor, and major carry hierarchy without overflow', () => {
-    const converter = new SemverIntConverter({ numPrereleaseDigits: 16 })
-    const cases = [
-      { version: ['0', '99', '99', ''], expected: '099999999999999999999' },
-      { version: ['1', '0', '0', '0'], expected: '100001100000000000000' },
-      { version: ['1', '0', '0', 'a'], expected: '100002380000000000000' },
-      { version: ['1', '0', '0', ''], expected: '100009999999999999999' },
-      { version: ['1', '0', '1', '0'], expected: '100011100000000000000' },
-      { version: ['1', '1', '0', '0'], expected: '101001100000000000000' },
-      { version: ['2', '0', '0', '0'], expected: '200001100000000000000' },
-    ]
-    let previous = -1n
-    for (const { version, expected } of cases) {
-      const result = converter.semverToInt(version[0], version[1], version[2], version[3])
-      expect(result).toEqual({ versionStr: expected, errs: [] })
-      const value = BigInt(result.versionStr)
-      expect(value).toBeGreaterThan(previous)
-      previous = value
-    }
-  })
-})
-
-it('sorts a.z below aa because the first identifier establishes precedence', () => {
-  const lower = prereleaseToInt('a.z', 10, 6)
-  const higher = prereleaseToInt('aa', 10, 6)
-  expect(lower).toEqual({ strNum: '2380026300', errs: [] })
-  expect(higher).toEqual({ strNum: '2383800000', errs: [] })
-  expect(BigInt(lower.strNum)).toBeLessThan(BigInt(higher.strNum))
 })
 
 it('matches SemVer order for mixed identifier sequences within both budgets', () => {
@@ -87,14 +114,6 @@ it('matches SemVer order for mixed identifier sequences within both budgets', ()
     }
   }
 
-  const converter = new SemverIntConverter({ numPrereleaseComponentDigits: 8, numPrereleaseDigits: 64 })
-  let previous = -1n
-  for (const version of versions.sort(semver.compare)) {
-    const prerelease = version.slice('1.2.3-'.length)
-    const result = converter.semverToInt('1', '2', '3', prerelease)
-    const value = BigInt(result.versionStr)
-    expect(result.errs, version).toEqual([])
-    expect(value, version).toBeGreaterThan(previous)
-    previous = value
-  }
+  const config = { numPrereleaseComponentDigits: 8, numPrereleaseDigits: 64 }
+  expectVersionsInOrder(config, versions.sort(semver.compare))
 })
