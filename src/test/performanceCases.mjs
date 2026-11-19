@@ -61,15 +61,17 @@ export const performanceCases = [
   },
   {
     id: 'numeric-clamp-flag',
-    prerelease: '999999',
+    prerelease: '1000000',
     config: {},
+    // Legacy versions clamp silently. The baseline control measures the cost of returning one OverflowError.
+    cpuErrorReferenceCase: 'core-overflow-control',
     cpuIterations: 20_000,
     warmupIterations: 10_000,
     memoryCheckpoints: [1000, 10_000, 20_000],
   },
   {
     id: 'numeric-clamp-ignore',
-    prerelease: '999999',
+    prerelease: '1000000',
     config: { prereleaseNumericComponentErrors: 'ignore' },
     cpuIterations: 20_000,
     warmupIterations: 10_000,
