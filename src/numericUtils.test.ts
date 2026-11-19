@@ -33,3 +33,34 @@ it('fmtLimitSizeNumeric function', () => {
   expect(fmtLimitSizeNumeric('123456789', 12)).toEqual({ strNum: '123456789', hasOverflow: false })
   expect(fmtLimitSizeNumeric('123456789', 22)).toEqual({ strNum: '123456789', hasOverflow: false })
 })
+
+it('preserves exact large decimal inputs at and below the width', () => {
+  const input = '900719925474099312345'
+  expect(fmtLimitSizeNumeric(input, 22)).toEqual({ strNum: input, hasOverflow: false })
+  expect(fmtFixedSizeNumeric(input, 21)).toEqual({ strNum: input, hasOverflow: false })
+  expect(fmtFixedSizeNumeric(input, 22)).toEqual({ strNum: `0${input}`, hasOverflow: false })
+})
+
+it('saturates large decimal inputs with exactly the requested number of digits', () => {
+  const result = { strNum: '9'.repeat(21), hasOverflow: true }
+  expect(fmtLimitSizeNumeric('1' + '0'.repeat(21), 21)).toEqual(result)
+  expect(fmtFixedSizeNumeric('9'.repeat(309), 21)).toEqual(result)
+})
+
+it('reports an overflow for a zero-width field', () => {
+  expect(fmtLimitSizeNumeric('0', 0)).toEqual({ strNum: '', hasOverflow: true })
+  expect(fmtFixedSizeNumeric('1', 0)).toEqual({ strNum: '', hasOverflow: true })
+})
+
+it('counts leading zeros as digits in the requested width', () => {
+  expect(fmtLimitSizeNumeric('001', 3)).toEqual({ strNum: '001', hasOverflow: false })
+  expect(fmtLimitSizeNumeric('001', 2)).toEqual({ strNum: '99', hasOverflow: true })
+})
+
+it.each(['', '-1', '+1', '1.0', '1e2', ' 1', '1 '])('rejects non-digit input %j', input => {
+  expect(() => fmtLimitSizeNumeric(input, 3)).toThrow('strNum must be an integer >= 0')
+})
+
+it.each([-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('rejects an invalid width %s', width => {
+  expect(() => fmtFixedSizeNumeric('1', width)).toThrow('desiredDigits must be a nonnegative safe integer')
+})

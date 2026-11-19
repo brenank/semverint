@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { SemverIntConverter } from './converter.js'
 import { prereleaseToInt } from './prereleaseUtils.js'
+import { convertVersion } from './test/convertVersion.js'
 import { SemverIntConfig } from './types/config.js'
 
 const mapping: SemverIntConfig['firstPrereleaseComponentToDigit'] = [
@@ -19,105 +20,108 @@ const mapping: SemverIntConfig['firstPrereleaseComponentToDigit'] = [
 const componentOverflow = { name: 'OverflowError', componentName: 'prereleaseNumericComponent' }
 const precisionLoss = { name: 'PrecisionLossError', componentName: 'prerelease' }
 
-describe('issue #10 current behavior: the first numeric identifier discards the tail without errors', () => {
+describe('issue #10: process numeric identifier tails and diagnose insufficient total space', () => {
   it.each([
-    [10, 'a.1', '102037300000100'],
-    [10, 'a.1.a', '102037300000100'],
-    [10, '0.1', '102030000000000'],
-    [10, '0.2', '102030000000000'],
-    [10, 'rc.1', '102039075000001'],
-    [10, 'rc.1.1', '102039075000001'],
-    [16, 'rc.1', '102039075000001000000'],
-    [16, 'rc.1.1', '102039075000001000000'],
-    [16, 'rc.1.2', '102039075000001000000'],
-    [16, '1', '102030000010000000000'],
-    [16, '1.1', '102030000010000000000'],
-    [16, '1.2', '102030000010000000000'],
-  ])('%s prerelease digits: %s currently returns %s', (digits, prerelease, expected) => {
+    [10, '1.2.3-a.1', '102032380011100', []],
+    [10, '1.2.3-a.1.a', '102032380011124', [precisionLoss]],
+    [10, '1.2.3-0.1', '102031101110000', []],
+    [10, '1.2.3-0.2', '102031101120000', []],
+    [10, '1.2.3-rc.1', '102032554000111', []],
+    [10, '1.2.3-rc.1.1', '102032554000111', [precisionLoss]],
+    [16, '1.2.3-rc.1', '102032554000111000000', []],
+    [16, '1.2.3-rc.1.1', '102032554000111111000', []],
+    [16, '1.2.3-rc.1.2', '102032554000111112000', []],
+    [16, '1.2.3-1', '102031110000000000000', []],
+    [16, '1.2.3-1.1', '102031111110000000000', []],
+    [16, '1.2.3-1.2', '102031111120000000000', []],
+  ])('%s prerelease digits: %s encodes as %s', (digits, version, expected, errors) => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: digits })
-    expect(converter.semverToInt('1', '2', '3', prerelease)).toEqual({ versionStr: expected, errs: [] })
+    const result = convertVersion(converter, version)
+    expect(result.versionStr).toBe(expected)
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
   })
 })
 
 describe('prerelease digit encoding', () => {
   it.each([
-    ['0', '0000000000000000'],
-    ['1', '0000010000000000'],
-    ['2', '0000020000000000'],
-    ['9', '0000090000000000'],
-    ['10', '0000100000000000'],
-    ['35', '0000350000000000'],
-    ['100', '0001000000000000'],
-    ['363635', '3636350000000000'],
-    ['-', '4600000000000000'],
-    ['A', '4700000000000000'],
-    ['Z', '7200000000000000'],
-    ['a', '7300000000000000'],
-    ['a0', '7336000000000000'],
-    ['aa', '7373000000000000'],
-    ['ab', '7374000000000000'],
-    ['b', '7400000000000000'],
-    ['z', '9800000000000000'],
+    ['0', '110'],
+    ['1', '111'],
+    ['2', '112'],
+    ['9', '119'],
+    ['10', '1210'],
+    ['35', '1235'],
+    ['100', '13100'],
+    ['999999', '16999999'],
+    ['-', '20100'],
+    ['0a', '2023800'],
+    ['A', '21200'],
+    ['Z', '23700'],
+    ['a', '23800'],
+    ['a0', '2380200'],
+    ['aa', '2383800'],
+    ['ab', '2383900'],
+    ['b', '23900'],
+    ['z', '26300'],
     ['', '9999999999999999'],
-  ])('encodes identifier %j as %s with a sixteen-digit budget', (prerelease, expected) => {
-    expect(prereleaseToInt(prerelease, 16, 6)).toEqual({ strNum: expected, errs: [] })
+  ])('encodes identifier %j with payload %s in a sixteen-digit budget', (prerelease, expected) => {
+    expect(prereleaseToInt(prerelease, 16, 6)).toEqual({ strNum: expected.padEnd(16, '0'), errs: [] })
   })
 })
 
-describe('current prerelease identifier processing', () => {
+describe('prerelease identifier processing', () => {
   it.each([
-    ['1e2', '1020337773800000000000000'],
-    ['0x10', '1020336963736000000000000'],
-    ['01a', '1020336377300000000000000'],
-    ['00-', '1020336364600000000000000'],
-  ])('encodes numeric-looking identifier %s as text', (prerelease, expected) => {
+    ['1.2.3-1e2', '1020320342040000000000000'],
+    ['1.2.3-0x10', '1020320261030200000000000'],
+    ['1.2.3-01a', '1020320203380000000000000'],
+    ['1.2.3-00-', '1020320202010000000000000'],
+  ])('encodes the numeric-looking identifier in %s as text', (version, expected) => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: 20, numPrereleaseComponentDigits: 16 })
-    expect(converter.semverToInt('1', '2', '3', prerelease)).toEqual({ versionStr: expected, errs: [] })
+    expect(convertVersion(converter, version)).toEqual({ versionStr: expected, errs: [] })
   })
 
   it.each([
-    ['1.alpha', '0000010000'],
-    ['1.2.alpha', '0000010000'],
-    ['a.1.b', '7300000100'],
-    ['a.b.1.z', '7374000001'],
-    ['a.b.1.2', '7374000001'],
-    ['a.b.c', '7374750000'],
-    ['1a.2.z', '3773000002'],
-    ['0a', '3673000000'],
-  ])('currently encodes %s as %s, stopping after a numeric identifier', (prerelease, expected) => {
-    expect(prereleaseToInt(prerelease, 10, 6)).toEqual({ strNum: expected, errs: [] })
-  })
-
-  it.each([
-    [7, '737475980000', []],
-    [6, '737475980000', []],
-    [5, '737479999999', [componentOverflow]],
-  ])('component budget %s is one above, exactly at, or one below the six-digit abc encoding', (digits, expected, errors) => {
-    const result = prereleaseToInt('abc.z', 12, digits)
+    ['1.alpha', '1112384953', [componentOverflow]],
+    ['1.alpha.z', '1112384953', [componentOverflow, precisionLoss]],
+    ['1.2.alpha', '1111122385', [componentOverflow, precisionLoss]],
+    ['a.1.b', '2380011124', [precisionLoss]],
+    ['a.b.c', '2380023900', [precisionLoss]],
+    ['1a.2.z', '2033800112', [precisionLoss]],
+    ['0a', '2023800000', []],
+    ['a.z', '2380026300', []],
+    ['aa', '2383800000', []],
+  ])('encodes mixed identifiers in %s as %s', (prerelease, expected, errors) => {
+    const result = prereleaseToInt(prerelease, 10, 6)
     expect(result.strNum).toBe(expected)
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
   })
 
   it.each([
-    ['a.b.c', 5, '73747', [precisionLoss]],
-    ['a.b.c', 6, '737475', []],
-    ['a.b.c', 7, '7374750', []],
-    ['abc.z', 5, '73747', [precisionLoss]],
-    ['abc.z', 6, '737475', []],
-    ['abc.z', 7, '7374760', [precisionLoss]],
-    ['abc.1.z', 6, '737475', []],
-  ])(
-    'current total-budget behavior for %s with %s digits, including unprocessed identifiers',
-    (prerelease, digits, expected, errors) => {
-      const result = prereleaseToInt(prerelease, digits, 6)
-      expect(result.strNum).toBe(expected)
-      expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
-    },
-  )
+    [7, '23839400026300', []],
+    [6, '23839400026300', []],
+    [5, '23839499999999', [componentOverflow, precisionLoss]],
+  ])('fits or clamps the six-digit abc payload within a component budget of %s digits', (digits, expected, errors) => {
+    const result = prereleaseToInt('abc.z', 14, digits)
+    expect(result.strNum).toBe(expected)
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
+  })
 
-  it('currently reports component overflow before total precision loss', () => {
+  it.each([
+    ['a.b.c', 14, '23800239002400', [precisionLoss]],
+    ['a.b.c', 15, '238002390024000', []],
+    ['a.b.c', 16, '2380023900240000', []],
+    ['abc.z', 8, '23839400', [precisionLoss]],
+    ['abc.z', 9, '238394000', [precisionLoss]],
+    ['abc.z', 10, '2383940003', [precisionLoss]],
+    ['abc.1.z', 9, '238394000', [precisionLoss]],
+  ])('total-budget handling for %s with %s digits, including unprocessed identifiers', (prerelease, digits, expected, errors) => {
+    const result = prereleaseToInt(prerelease, digits, 6)
+    expect(result.strNum).toBe(expected)
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
+  })
+
+  it('reports component overflow before total precision loss', () => {
     const result = prereleaseToInt('abcd.z', 5, 6)
-    expect(result.strNum).toBe('73747')
+    expect(result.strNum).toBe('23839')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([componentOverflow, precisionLoss])
   })
 })
@@ -128,10 +132,10 @@ describe('first prerelease identifier mapping', () => {
     ['beta', '2000000000'],
     ['last', '9000000000'],
     ['unknown', '0000000000'],
-    ['unknown.1', '0000001000'],
-    ['alpha.1.z', '1000001000'],
+    ['unknown.1', '0111000000'],
+    ['alpha.1.z', '1111263000'],
     ['', '9999999999'],
-  ])('currently maps %s to %s and ignores a tail after a numeric identifier', (prerelease, expected) => {
+  ])('maps %s to %s and processes following numeric and text identifiers', (prerelease, expected) => {
     expect(prereleaseToInt(prerelease, 10, 6, mapping)).toEqual({ strNum: expected, errs: [] })
   })
 
@@ -144,8 +148,8 @@ describe('first prerelease identifier mapping', () => {
   it('maps a numeric first identifier before numeric processing', () => {
     const numericMapping: NonNullable<SemverIntConfig['firstPrereleaseComponentToDigit']> = [...mapping]
     numericMapping[1] = '1'
-    expect(prereleaseToInt('1.2', 10, 6, numericMapping)).toEqual({ strNum: '2000002000', errs: [] })
-    expect(prereleaseToInt('2.1', 10, 6, numericMapping)).toEqual({ strNum: '0000001000', errs: [] })
+    expect(prereleaseToInt('1.2', 10, 6, numericMapping)).toEqual({ strNum: '2112000000', errs: [] })
+    expect(prereleaseToInt('2.1', 10, 6, numericMapping)).toEqual({ strNum: '0111000000', errs: [] })
   })
 
   it('does not apply the component budget to a mapped first identifier', () => {
@@ -153,115 +157,125 @@ describe('first prerelease identifier mapping', () => {
   })
 
   it.each([
-    [2, '17', [precisionLoss]],
-    [3, '173', []],
-    [4, '1730', []],
+    [3, '124', [precisionLoss]],
+    [5, '12380', [precisionLoss]],
+    [6, '123800', []],
+    [7, '1238000', []],
   ])('uses the mapped first digit in the total budget of %s', (digits, expected, errors) => {
     const result = prereleaseToInt('alpha.a', digits, 6, mapping)
     expect(result.strNum).toBe(expected)
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
   })
 
-  it('currently processes an extra identifier after a mapping exactly fills the budget', () => {
+  it('diagnoses remaining identifiers after a mapping exactly fills the budget', () => {
     const result = prereleaseToInt('alpha.a', 1, 6, mapping)
-    expect(result.strNum).toBe('2')
+    expect(result.strNum).toBe('1')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([precisionLoss])
   })
 
-  it('currently collides the ninth mapping entry with stable releases at a one-digit budget', () => {
-    expect(prereleaseToInt('last', 1, 6, mapping)).toEqual({ strNum: '9', errs: [] })
+  it('reserves the stable release value when the ninth mapping entry fills a one-digit budget', () => {
+    const result = prereleaseToInt('last', 1, 6, mapping)
+    expect(result.strNum).toBe('8')
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([precisionLoss])
     expect(prereleaseToInt('', 1, 6, mapping)).toEqual({ strNum: '9', errs: [] })
     expect(prereleaseToInt('last', 2, 6, mapping)).toEqual({ strNum: '90', errs: [] })
     expect(prereleaseToInt('', 2, 6, mapping)).toEqual({ strNum: '99', errs: [] })
   })
 })
 
-describe('current silent numeric clamping and Number precision loss', () => {
+describe('exact numeric prerelease limits', () => {
   it.each([
-    [1, '1', '1000000000'],
-    [1, '2', '2000000000'],
-    [1, '3', '2000000000'],
-    [2, '34', '3400000000'],
-    [2, '35', '3500000000'],
-    [2, '36', '3500000000'],
-    [3, '35', '0350000000'],
-    [3, '36', '0350000000'],
-    [4, '3634', '3634000000'],
-    [4, '3635', '3635000000'],
-    [4, '3636', '3635000000'],
-    [6, '363634', '3636340000'],
-    [6, '363635', '3636350000'],
-    [6, '363636', '3636350000'],
-  ])('currently encodes numeric %s-digit component %s as %s without errors', (digits, input, expected) => {
-    expect(prereleaseToInt(input, 10, digits)).toEqual({ strNum: expected, errs: [] })
+    [0, '0', '1099999999', [componentOverflow]],
+    [1, '9', '1190000000', []],
+    [1, '10', '1199999999', [componentOverflow]],
+    [2, '99', '1299000000', []],
+    [2, '100', '1299999999', [componentOverflow]],
+    [6, '999999', '1699999900', []],
+    [6, '1000000', '1699999999', [componentOverflow]],
+  ])('encodes numeric %s-digit component %s as %s with clamp diagnostics', (digits, input, expected, errors) => {
+    const result = prereleaseToInt(input, 10, digits)
+    expect(result.strNum).toBe(expected)
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
   })
 
-  it('currently clamps even numeric strings too large for a finite Number without errors', () => {
-    expect(prereleaseToInt('9'.repeat(309), 10, 6)).toEqual({ strNum: '3636350000', errs: [] })
+  it('diagnoses numeric clamping even for strings too large for a finite Number', () => {
+    const result = prereleaseToInt('9'.repeat(309), 10, 6)
+    expect(result.strNum).toBe('1699999999')
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([componentOverflow])
   })
 
-  it.each(['9007199254740992', '9007199254740993'])(
-    'currently aliases %s through Number even though the component budget is sufficient',
-    input => {
-      expect(prereleaseToInt(input, 20, 18)).toEqual({ strNum: '00900719925474099200', errs: [] })
-    },
-  )
-
-  it.each(['999999999999999999999', '1000000000000000000000'])(
-    'currently emits exponent notation without errors for numeric identifier %s near the Number formatting boundary',
-    input => {
-      expect(prereleaseToInt(input, 30, 22)).toEqual({ strNum: '000000000000000001e+2100000000', errs: [] })
-    },
-  )
-
-  it('currently emits decimal digits for a representable Number just below the exponent formatting boundary', () => {
-    expect(prereleaseToInt('999999999999999900000', 30, 22)).toEqual({
-      strNum: '099999999999999990000000000000',
-      errs: [],
-    })
+  it.each([
+    [9, '123456789', '1912345678900000'],
+    [10, '123456789', '1091234567890000'],
+    [10, '1234567890', '1101234567890000'],
+  ])('frames numeric identifier %s-width %s with the configured length prefix', (digits, input, expected) => {
+    expect(prereleaseToInt(input, 16, digits)).toEqual({ strNum: expected, errs: [] })
   })
 
-  it('currently returns a nondecimal public version string without errors at the exponent formatting boundary', () => {
+  it.each([
+    ['9007199254740992', '11690071992547409920'],
+    ['9007199254740993', '11690071992547409930'],
+  ])('preserves numeric identifier %s beyond the safe integer range', (input, expected) => {
+    expect(prereleaseToInt(input, 20, 18)).toEqual({ strNum: expected, errs: [] })
+  })
+
+  it.each([
+    ['999999999999999999999', '121999999999999999999999'],
+    ['1000000000000000000000', '1221000000000000000000000'],
+    ['999999999999999900000', '121999999999999999900000'],
+  ])('preserves decimal digits for numeric identifier %s around the Number exponent boundary', (input, expected) => {
+    expect(prereleaseToInt(input, 30, 22)).toEqual({ strNum: expected.padEnd(30, '0'), errs: [] })
+  })
+
+  it('returns a decimal public version string beyond the Number exponent boundary', () => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: 30, numPrereleaseComponentDigits: 22 })
-    expect(converter.semverToInt('1', '2', '3', '1000000000000000000000')).toEqual({
-      versionStr: '10203000000000000000001e+2100000000',
+    expect(convertVersion(converter, '1.2.3-1000000000000000000000')).toEqual({
+      versionStr: '10203122100000000000000000000000000',
       errs: [],
     })
   })
 
-  it('currently throws when maxSemverInt parses the exponent notation produced by a numeric identifier', () => {
+  it('compares and caps a numeric identifier beyond the Number exponent boundary exactly', () => {
     const converter = new SemverIntConverter({
       numPrereleaseDigits: 30,
       numPrereleaseComponentDigits: 22,
-      maxSemverInt: 10n ** 40n,
+      maxSemverInt: 10203099999999999999999999999999999n,
     })
-    expect(() => converter.semverToInt('1', '2', '3', '1000000000000000000000')).toThrow(SyntaxError)
+    const result = convertVersion(converter, '1.2.3-1000000000000000000000')
+    expect(result.versionStr).toBe('10203099999999999999999999999999999')
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
+      { name: 'OverflowError', componentName: 'semverint' },
+    ])
   })
 
-  it('currently loses precision when computing a numeric ceiling wider than the safe integer range', () => {
-    expect(prereleaseToInt('99999999999999999999', 20, 20)).toEqual({
-      strNum: '36363636363636363000',
-      errs: [],
-    })
+  it('computes the numeric ceiling exactly beyond the safe integer range', () => {
+    const result = prereleaseToInt('9'.repeat(21), 24, 20)
+    expect(result.strNum).toBe(`120${'9'.repeat(21)}`)
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([componentOverflow])
   })
 })
 
-// These collisions are implementation defects, not intended SemVer equivalences.
-describe('current collisions without overflow diagnostics', () => {
+describe('distinct prerelease boundaries', () => {
   it.each([
-    [['0', '0.0', '0.1'], '0000000000'],
-    [['a', 'a.0', 'a.0.0'], '7300000000'],
-    [['ab', 'a.b', 'ab.0', 'ab.0.0'], '7374000000'],
-    [['abc', 'a.bc', 'ab.c', 'a.b.c'], '7374750000'],
-  ])('currently aliases %j', (prereleases, expected) => {
-    for (const prerelease of prereleases) {
-      expect(prereleaseToInt(prerelease, 10, 6)).toEqual({ strNum: expected, errs: [] })
-    }
+    ['0', '110'],
+    ['0.0', '110110'],
+    ['0.0.0', '110110110'],
+    ['a', '23800'],
+    ['a.0', '23800110'],
+    ['a.0.0', '23800110110'],
+    ['a.b.c', '238002390024000'],
+    ['a.bc', '238002394000'],
+    ['ab.c', '238390024000'],
+    ['abc', '238394000'],
+  ])('encodes the identifier boundaries of %s independently of padding', (prerelease, expected) => {
+    expect(prereleaseToInt(prerelease, 24, 6)).toEqual({ strNum: expected.padEnd(24, '0'), errs: [] })
   })
 
-  it('currently aliases absent and trailing zero identifiers after mapping', () => {
-    for (const prerelease of ['alpha', 'alpha.0', 'alpha.0.0', 'alpha.0.1']) {
-      expect(prereleaseToInt(prerelease, 10, 6, mapping)).toEqual({ strNum: '1000000000', errs: [] })
-    }
+  it.each([
+    ['alpha', '1000000000'],
+    ['alpha.0', '1110000000'],
+    ['alpha.0.0', '1110110000'],
+  ])('distinguishes %s after mapping from versions with different trailing zero identifiers', (prerelease, expected) => {
+    expect(prereleaseToInt(prerelease, 10, 6, mapping)).toEqual({ strNum: expected, errs: [] })
   })
 })

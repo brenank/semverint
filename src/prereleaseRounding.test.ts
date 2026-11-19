@@ -18,8 +18,11 @@ describe('prerelease decimal formatting', () => {
     ['12344', 4, '1234', true],
     ['12345', 4, '1235', true],
     ['12346', 4, '1235', true],
+    ['12995', 4, '1300', true],
+    ['009995', 4, '0100', true],
+    ['19995', 4, '2000', true],
     ['99994', 4, '9999', true],
-  ])('formats %s to %s digits with leading zeros, padding, and half-threshold rounding', (input, digits, expected, loss) => {
+  ])('formats %s to %s digits using the first discarded digit to round', (input, digits, expected, loss) => {
     expect(fmtFixedSizePrerelease(input, digits)).toEqual({ strNum: expected, hasPrecisionLoss: loss })
   })
 
@@ -27,19 +30,19 @@ describe('prerelease decimal formatting', () => {
     ['00', 1],
     ['0000', 1],
     ['000', 2],
-  ])('currently returns N when all-zero input %s exceeds a budget of %s', (input, digits) => {
-    expect(fmtFixedSizePrerelease(input, digits)).toEqual({ strNum: 'N', hasPrecisionLoss: true })
+  ])('preserves zeros and reports precision loss when %s exceeds a budget of %s', (input, digits) => {
+    expect(fmtFixedSizePrerelease(input, digits)).toEqual({ strNum: '0'.repeat(digits), hasPrecisionLoss: true })
   })
 
   it.each([
-    ['999', 1, '0'],
-    ['99995', 4, '0000'],
-    ['99996', 4, '0000'],
-  ])('currently wraps rounding carry for %s to %s digits instead of saturating', (input, digits, expected) => {
+    ['999', 1, '9'],
+    ['99995', 4, '9999'],
+    ['99996', 4, '9999'],
+  ])('uses all nines when rounding %s would exceed %s digits', (input, digits, expected) => {
     expect(fmtFixedSizePrerelease(input, digits)).toEqual({ strNum: expected, hasPrecisionLoss: true })
   })
 
-  it('currently passes through an unsafe integer exactly until rounding is needed', () => {
+  it('preserves unsafe integer digits and rounds an exact decimal half upward', () => {
     expect(fmtFixedSizePrerelease('9007199254740993', 16)).toEqual({
       strNum: '9007199254740993',
       hasPrecisionLoss: false,
@@ -50,62 +53,68 @@ describe('prerelease decimal formatting', () => {
     })
   })
 
-  it('currently introduces Number precision loss while rounding beyond sixteen digits', () => {
+  it('rounds exactly beyond sixteen digits', () => {
     expect(fmtFixedSizePrerelease('123456789012345678901', 20)).toEqual({
-      strNum: '12345678901234567737',
+      strNum: '12345678901234567890',
       hasPrecisionLoss: true,
     })
   })
 
-  it('currently accepts the toFixed boundary of one hundred digits with binary floating point artifacts', () => {
+  it('rounds exactly at a width of one hundred digits', () => {
     expect(fmtFixedSizePrerelease('1'.repeat(101), 100)).toEqual({
-      strNum: '1111111111111111049432054187491303309798240661621093750000000000000000000000000000000000000000000000',
+      strNum: '1'.repeat(100),
       hasPrecisionLoss: true,
     })
   })
 
-  it('currently accepts widths above one hundred only when rounding is unnecessary', () => {
+  it('supports padding, exact fits, and rounding above one hundred digits', () => {
     expect(fmtFixedSizePrerelease('1', 101)).toEqual({ strNum: '1'.padEnd(101, '0'), hasPrecisionLoss: false })
     expect(fmtFixedSizePrerelease('1'.repeat(101), 101)).toEqual({ strNum: '1'.repeat(101), hasPrecisionLoss: false })
-    expect(() => fmtFixedSizePrerelease('1'.repeat(102), 101)).toThrow(RangeError)
+    expect(fmtFixedSizePrerelease('1'.repeat(102), 101)).toEqual({ strNum: '1'.repeat(101), hasPrecisionLoss: true })
   })
 
-  it('currently loses all significant digits when finite numeric input requires an infinite scale factor', () => {
-    expect(fmtFixedSizePrerelease('1'.repeat(309), 10)).toEqual({ strNum: '0000000000', hasPrecisionLoss: true })
+  it('rounds arbitrarily large decimal input without converting to Number', () => {
+    expect(fmtFixedSizePrerelease('1'.repeat(309), 10)).toEqual({ strNum: '1111111111', hasPrecisionLoss: true })
+  })
+
+  it('saturates a huge all-nine decimal string without wrapping', () => {
+    expect(fmtFixedSizePrerelease('9'.repeat(309), 4)).toEqual({ strNum: '9999', hasPrecisionLoss: true })
   })
 
   it.each([-1, 0, 1.5, NaN, Infinity])('rejects a non-positive or non-integer width %s', digits => {
     expect(() => fmtFixedSizePrerelease('123', digits)).toThrow('desiredLength must be an integer > 0')
   })
 
-  it.each(['-1', '1.5', 'abc', '9'.repeat(309)])(
-    'rejects input that does not convert to a finite nonnegative integer: %s',
-    input => {
-      expect(() => fmtFixedSizePrerelease(input, 4)).toThrow('strNum must be an integer >= 0')
-    },
-  )
+  it.each(['', '-1', '1.5', 'abc', '1e21'])('rejects input outside decimal digit strings: %s', input => {
+    expect(() => fmtFixedSizePrerelease(input, 4)).toThrow('strNum must be an integer >= 0')
+  })
 })
 
-describe('current zero-rounding behavior through conversion APIs', () => {
-  it('returns N with a precision-loss descriptor when a numeric zero component exceeds the total budget', () => {
+describe('rounding numeric zero through conversion APIs', () => {
+  it('reports precision loss when the numeric payload is a discarded zero', () => {
     const result = prereleaseToInt('0', 2, 6)
-    expect(result.strNum).toBe('N')
+    expect(result.strNum).toBe('11')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
       { name: 'PrecisionLossError', componentName: 'prerelease' },
     ])
   })
 
-  it('currently produces a nonnumeric version string for truncated numeric zero', () => {
+  it('produces a decimal version string for truncated numeric zero', () => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: 2 })
     const result = converter.semverToInt('1', '2', '3', '0')
-    expect(result.versionStr).toBe('10203N')
+    expect(result.versionStr).toBe('1020311')
     expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
       { name: 'PrecisionLossError', componentName: 'prerelease' },
     ])
   })
 
-  it('currently throws when maxSemverInt attempts to parse the nonnumeric zero-rounding result', () => {
+  it('applies maxSemverInt to a truncated numeric zero result', () => {
     const converter = new SemverIntConverter({ numPrereleaseDigits: 2, maxSemverInt: 999999n })
-    expect(() => converter.semverToInt('1', '2', '3', '0')).toThrow(SyntaxError)
+    const result = converter.semverToInt('1', '2', '3', '0')
+    expect(result.versionStr).toBe('999999')
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual([
+      { name: 'PrecisionLossError', componentName: 'prerelease' },
+      { name: 'OverflowError', componentName: 'semverint' },
+    ])
   })
 })
