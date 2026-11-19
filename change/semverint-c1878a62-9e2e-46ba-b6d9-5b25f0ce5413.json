@@ -1,0 +1,7 @@
+{
+  "packageName": "semverint",
+  "type": "none",
+  "comment": "test: clarify conversion expectations and precedence checks",
+  "email": "brenankly@gmail.com",
+  "dependentChangeType": "none"
+}

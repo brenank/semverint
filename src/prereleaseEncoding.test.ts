@@ -39,6 +39,31 @@ describe('issue #10 current behavior: the first numeric identifier discards the 
   })
 })
 
+describe('prerelease digit encoding', () => {
+  it.each([
+    ['0', '0000000000000000'],
+    ['1', '0000010000000000'],
+    ['2', '0000020000000000'],
+    ['9', '0000090000000000'],
+    ['10', '0000100000000000'],
+    ['35', '0000350000000000'],
+    ['100', '0001000000000000'],
+    ['363635', '3636350000000000'],
+    ['-', '4600000000000000'],
+    ['A', '4700000000000000'],
+    ['Z', '7200000000000000'],
+    ['a', '7300000000000000'],
+    ['a0', '7336000000000000'],
+    ['aa', '7373000000000000'],
+    ['ab', '7374000000000000'],
+    ['b', '7400000000000000'],
+    ['z', '9800000000000000'],
+    ['', '9999999999999999'],
+  ])('encodes identifier %j as %s with a sixteen-digit budget', (prerelease, expected) => {
+    expect(prereleaseToInt(prerelease, 16, 6)).toEqual({ strNum: expected, errs: [] })
+  })
+})
+
 describe('current prerelease identifier processing', () => {
   it.each([
     ['1e2', '1020337773800000000000000'],
