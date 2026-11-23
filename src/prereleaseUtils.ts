@@ -77,7 +77,7 @@ function prereleaseToInt(
 
   const numericLengthWidth = String(desiredComponentDigits).length
   const components = prerelease.split('.')
-  let hasUnprocessedComponents = false
+  let hasOmittedComponents = false
   for (const [i, component] of components.entries()) {
     let hasComponentOverflow = false
     if (i == 0 && firstPrereleaseComponentToDigit !== undefined) {
@@ -120,7 +120,7 @@ function prereleaseToInt(
     }
 
     if (hasComponentOverflow || prereleaseNumber.length >= desiredDigits) {
-      hasUnprocessedComponents = i < components.length - 1
+      hasOmittedComponents = i < components.length - 1
       break
     }
   }
@@ -132,7 +132,7 @@ function prereleaseToInt(
     // Stay below the stable release by replacing its final nine with eight: 999 becomes 998.
     prereleaseResult.strNum = prereleaseResult.strNum.slice(0, -1) + '8'
   }
-  if (prereleaseResult.hasPrecisionLoss || hasUnprocessedComponents || matchesStableReleaseDigits) {
+  if (prereleaseResult.hasPrecisionLoss || hasOmittedComponents || matchesStableReleaseDigits) {
     errs.push(new PrecisionLossError(SemverComponent.Prerelease, prerelease))
   }
   return { strNum: prereleaseResult.strNum, errs }
