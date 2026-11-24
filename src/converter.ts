@@ -55,7 +55,8 @@ class SemverIntConverter {
 
   public semverToInt(majorStr: string, minorStr: string, patchStr: string, prerelease: string): SemverIntResult {
     const configured = this.cfg
-    // Read the declared fields so inherited options are preserved in this call's snapshot.
+    // Public configuration can change after construction. Read each field once
+    // so validation and encoding use the same values, including inherited options.
     const cfg: SemverIntConfig = {
       numMajorDigits: configured.numMajorDigits,
       numMinorDigits: configured.numMinorDigits,
@@ -120,15 +121,10 @@ class SemverIntConverter {
       cfg.numPrereleaseComponentDigits,
       cfg.firstPrereleaseComponentToDigit,
       cfg.prereleaseNumericComponentErrors == 'error',
+      cfg.prereleaseErrors == 'error',
     )
     versionStr += prereleaseResult.strNum
-    errs.push(
-      ...prereleaseResult.errs.filter(
-        err =>
-          (cfg.prereleaseErrors == 'error' && err.componentName == SemverComponent.Prerelease) ||
-          (cfg.prereleaseNumericComponentErrors == 'error' && err.componentName == SemverComponent.PrereleaseComponent),
-      ),
-    )
+    errs.push(...prereleaseResult.errs)
 
     return applyMaximum({ versionStr, errs }, cfg.maxSemverInt)
   }

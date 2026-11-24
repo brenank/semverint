@@ -189,6 +189,8 @@ export function checkPerformanceBudgets(workload, baseline, candidate, reference
     const workloadLimitUs = cpuLimitUs(baselineCpu.medianCpuUs)
     let limitUs = workloadLimitUs
     let errorReference
+    // New errors incur stack capture. Use the baseline control so a slower
+    // candidate cannot raise its own CPU limit.
     if (
       workload.cpuErrorReferenceCase &&
       baselineOutcome.errors.length === 0 &&

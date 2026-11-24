@@ -59,6 +59,7 @@ function prereleaseToInt(
   desiredComponentDigits: number,
   firstPrereleaseComponentToDigit?: [string, string, string, string, string, string, string, string, string],
   reportComponentErrors = true,
+  reportPrereleaseErrors = true,
 ): {
   strNum: string
   errs: SemverIntError[]
@@ -71,7 +72,9 @@ function prereleaseToInt(
   }
 
   if (desiredDigits == 0) {
-    errs.push(new OverflowError(SemverComponent.Prerelease, prerelease))
+    if (reportPrereleaseErrors) {
+      errs.push(new OverflowError(SemverComponent.Prerelease, prerelease))
+    }
     return { strNum: '', errs }
   }
 
@@ -132,7 +135,8 @@ function prereleaseToInt(
     // Stay below the stable release by replacing its final nine with eight: 999 becomes 998.
     prereleaseResult.strNum = prereleaseResult.strNum.slice(0, -1) + '8'
   }
-  if (prereleaseResult.hasPrecisionLoss || hasOmittedComponents || matchesStableReleaseDigits) {
+  const hasPrecisionLoss = prereleaseResult.hasPrecisionLoss || hasOmittedComponents || matchesStableReleaseDigits
+  if (reportPrereleaseErrors && hasPrecisionLoss) {
     errs.push(new PrecisionLossError(SemverComponent.Prerelease, prerelease))
   }
   return { strNum: prereleaseResult.strNum, errs }

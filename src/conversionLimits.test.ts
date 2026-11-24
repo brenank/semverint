@@ -65,6 +65,16 @@ describe('error suppression affects diagnostics independently of encoded output'
   })
 
   it.each([
+    ['error', [precisionLoss]],
+    ['ignore', []],
+  ] as const)('encodes a default-width mixed prerelease with prereleaseErrors=%s', (prereleaseErrors, errors) => {
+    const converter = new SemverIntConverter({ prereleaseErrors })
+    const result = convertVersion(converter, '1.2.3-rc.1.2')
+    expect(result.versionStr).toBe('102032554000111')
+    expect(result.errs.map(({ name, componentName }) => ({ name, componentName }))).toEqual(errors)
+  })
+
+  it.each([
     ['majorVersionErrors', '100.2.3-a', '9999999999999999', 'major'],
     ['minorVersionErrors', '1.100.3-a', '199999999999999', 'minor'],
     ['patchVersionErrors', '1.2.100-a', '102999999999999', 'patch'],

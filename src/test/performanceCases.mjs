@@ -60,6 +60,14 @@ export const performanceCases = [
     memoryCheckpoints: [1000, 10_000, 30_000],
   },
   {
+    id: 'mixed-tail-rc-1-2-default-ignore',
+    prerelease: 'rc.1.2',
+    config: { prereleaseErrors: 'ignore' },
+    cpuIterations: 100_000,
+    warmupIterations: 10_000,
+    memoryCheckpoints: [1000, 10_000, 30_000],
+  },
+  {
     id: 'numeric-clamp-flag',
     prerelease: '1000000',
     config: {},
