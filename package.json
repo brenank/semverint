@@ -67,6 +67,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "3.8.0",
+    "semver": "7.7.3",
     "tsconfig-to-dual-package": "^1.2.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.17"

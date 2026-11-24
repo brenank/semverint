@@ -6,6 +6,9 @@ import { performanceCases } from './test/performanceCases.mjs'
 const MiB = 1024 * 1024
 const ordinaryCase = performanceCases[0]
 const wideRoundingCase = performanceCases.find(workload => workload.id === 'wide-round-P128-D140')
+const flaggedCase = performanceCases.find(workload => workload.id === 'numeric-clamp-flag')
+const ignoredCase = performanceCases.find(workload => workload.id === 'numeric-clamp-ignore')
+const coreOverflowCase = performanceCases.find(workload => workload.id === 'core-overflow-control')
 
 function memoryReading() {
   return { rss: 64 * MiB, heapTotal: 16 * MiB, heapUsed: 8 * MiB, external: MiB, arrayBuffers: 0 }
@@ -15,12 +18,16 @@ function successfulOutcome() {
   return { status: 'success', versionStr: '102039999999999', errors: [] }
 }
 
-function profile(cpuSamples = [1, 1, 1, 1, 1, 1, 1], workload = ordinaryCase) {
+function overflowOutcome(component) {
+  return { ...successfulOutcome(), errors: [{ name: 'OverflowError', component, message: 'overflow', messageLength: 8 }] }
+}
+
+function profile(cpuSamples = [1, 1, 1, 1, 1, 1, 1], workload = ordinaryCase, outcome = successfulOutcome()) {
   const metadata = {
     gcAvailable: true,
     startupMemory: memoryReading(),
     initialMemory: memoryReading(),
-    outcome: successfulOutcome(),
+    outcome,
     checksum: 1000,
   }
   const samples = [workload.warmupIterations, ...workload.memoryCheckpoints].map((iterations, index) => ({
@@ -112,6 +119,82 @@ describe('CPU performance budgets', () => {
     expect(result.outcomeChanged).toBe(true)
     expect(result.cpu.status).toBe('fail')
     expect(result.status).toBe('fail')
+  })
+})
+
+describe('CPU budget for newly flagged numeric prerelease overflow', () => {
+  const numericOverflow = overflowOutcome('prereleaseNumericComponent')
+  const majorOverflow = overflowOutcome('major')
+  const baseline = profile(undefined, flaggedCase)
+  const candidate = profile(Array(7).fill(4), flaggedCase, numericOverflow)
+  const reference = {
+    workload: coreOverflowCase,
+    baseline: profile(Array(7).fill(2), coreOverflowCase, majorOverflow),
+    candidate: profile(Array(7).fill(100), coreOverflowCase, majorOverflow),
+  }
+
+  it('reports the workload and baseline error reference limits alongside actual CPU medians', () => {
+    const result = checkPerformanceBudgets(flaggedCase, baseline, candidate, reference)
+    expect(result.status).toBe('pass')
+    expect(result.cpu).toMatchObject({
+      workloadLimitUs: 3,
+      baseline: { medianCpuUs: 1 },
+      candidate: { medianCpuUs: 4 },
+      errorReference: { caseId: 'core-overflow-control', medianCpuUs: 2, limitUs: 6 },
+      limitUs: 6,
+    })
+    expect(result.memory.metrics.map(metric => metric.limitBytes)).toEqual([12 * MiB, 2.5 * MiB, 96 * MiB])
+  })
+
+  it.each([
+    [[7, 7, 7, 7, 7, 6, 6], 'fail', 5],
+    [[7, 7, 7, 7, 6, 6, 6], 'pass', 4],
+  ])('applies the five-batch rule above the reference limit for %j', (samples, status, exceededBatches) => {
+    const result = checkPerformanceBudgets(flaggedCase, baseline, profile(samples, flaggedCase, numericOverflow), reference)
+    expect(result.status).toBe(status)
+    expect(result.cpu.exceededBatches).toBe(exceededBatches)
+  })
+
+  it('uses the workload limit when it exceeds the reference limit', () => {
+    const slowerBaseline = profile(Array(7).fill(3), flaggedCase)
+    expect(checkPerformanceBudgets(flaggedCase, slowerBaseline, candidate, reference).cpu.limitUs).toBe(9)
+  })
+
+  it('fails closed for an absent, mismatched, incomplete or unsuccessful reference', () => {
+    const exception = { status: 'exception', name: 'RangeError', message: 'Unexpected conversion failure' }
+    const invalidReferences = [
+      undefined,
+      { ...reference, workload: ignoredCase },
+      { ...reference, baseline: { ...reference.baseline, memory: [] } },
+      { ...reference, baseline: profile(undefined, coreOverflowCase, numericOverflow) },
+      { ...reference, baseline: profile(undefined, coreOverflowCase, exception) },
+    ]
+    for (const invalid of invalidReferences) {
+      const result = checkPerformanceBudgets(flaggedCase, baseline, candidate, invalid)
+      expect(result.status).toBe('fail')
+      expect(result.comparison).toBe('invalid')
+      expect(result.problems.join(' ')).toContain(coreOverflowCase.id)
+    }
+  })
+
+  it.each([
+    ['already flagged baseline', flaggedCase, numericOverflow, numericOverflow],
+    ['version change only', flaggedCase, successfulOutcome(), { ...successfulOutcome(), versionStr: 'changed' }],
+    ['different diagnostic', flaggedCase, successfulOutcome(), majorOverflow],
+    [
+      'multiple diagnostics',
+      flaggedCase,
+      successfulOutcome(),
+      { ...numericOverflow, errors: numericOverflow.errors.concat(numericOverflow.errors) },
+    ],
+    ['ignored clamp workload', ignoredCase, successfulOutcome(), numericOverflow],
+  ])('keeps the ordinary workload limit for %s', (_reason, workload, before, after) => {
+    const workloadBaseline = profile(undefined, workload, before)
+    const workloadCandidate = profile(Array(7).fill(4), workload, after)
+    const result = checkPerformanceBudgets(workload, workloadBaseline, workloadCandidate, reference)
+    expect(result.status).toBe('fail')
+    expect(result.cpu.limitUs).toBe(3)
+    expect(result.cpu.errorReference).toBeUndefined()
   })
 })
 

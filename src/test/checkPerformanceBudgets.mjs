@@ -36,6 +36,9 @@ function validateOutcome(outcome) {
 }
 
 function validateProfile(profile, workload, label) {
+  if (!Number.isInteger(workload.cpuIterations) || workload.cpuIterations <= 0) {
+    return [`${label}: CPU iterations must be a positive integer`]
+  }
   const problems = []
   if (!profile?.cpu || !Array.isArray(profile.memory) || profile.memory.length !== performancePolicy.memoryTrials) {
     return [`${label}: expected one CPU measurement and ${performancePolicy.memoryTrials} memory trials`]
@@ -129,10 +132,31 @@ function summarizeCpu(measurement) {
   return { medianCpuUs: median(cpuSamplesUs), medianWallUs: median(wallSamplesUs), cpuSamplesUs, wallSamplesUs }
 }
 
-export function checkPerformanceBudgets(workload, baseline, candidate) {
-  if (!Number.isInteger(workload.cpuIterations) || workload.cpuIterations <= 0) {
-    return { status: 'fail', comparison: 'invalid', problems: ['CPU iterations must be a positive integer'] }
+function cpuLimitUs(medianCpuUs) {
+  return Math.max(medianCpuUs * performancePolicy.cpuRatio, medianCpuUs + performancePolicy.cpuMinimumIncreaseUs)
+}
+
+function reportsOneOverflow(outcome, component) {
+  return (
+    outcome.status === 'success' &&
+    outcome.errors.length === 1 &&
+    outcome.errors[0].name === 'OverflowError' &&
+    outcome.errors[0].component === component
+  )
+}
+
+function validateErrorReference(referenceCase, expectedId) {
+  if (referenceCase?.workload?.id !== expectedId) {
+    return [`Expected baseline CPU error reference ${expectedId}`]
   }
+  const problems = validateProfile(referenceCase.baseline, referenceCase.workload, expectedId)
+  if (problems.length === 0 && !reportsOneOverflow(referenceCase.baseline.cpu.outcome, 'major')) {
+    problems.push(`Expected one major OverflowError in baseline CPU error reference ${expectedId}`)
+  }
+  return problems
+}
+
+export function checkPerformanceBudgets(workload, baseline, candidate, referenceCase) {
   const problems = [...validateProfile(baseline, workload, 'baseline'), ...validateProfile(candidate, workload, 'candidate')]
   const result = { status: 'fail', comparison: 'invalid', problems }
   if (problems.length > 0) return result
@@ -157,19 +181,38 @@ export function checkPerformanceBudgets(workload, baseline, candidate) {
     return result
   }
 
-  result.comparison = baselineUnsupported ? 'newly-supported' : 'measured'
   if (baselineUnsupported) {
     result.cpu = { status: 'unmeasurable', reason: 'Newly supported case: no successful baseline CPU reference' }
   } else {
     const baselineCpu = summarizeCpu(baseline.cpu)
     const candidateCpu = summarizeCpu(candidate.cpu)
-    const limitUs = Math.max(
-      baselineCpu.medianCpuUs * performancePolicy.cpuRatio,
-      baselineCpu.medianCpuUs + performancePolicy.cpuMinimumIncreaseUs,
-    )
+    const workloadLimitUs = cpuLimitUs(baselineCpu.medianCpuUs)
+    let limitUs = workloadLimitUs
+    let errorReference
+    // New errors incur stack capture. Use the baseline control so a slower
+    // candidate cannot raise its own CPU limit.
+    if (
+      workload.cpuErrorReferenceCase &&
+      baselineOutcome.errors.length === 0 &&
+      reportsOneOverflow(candidateOutcome, 'prereleaseNumericComponent')
+    ) {
+      problems.push(...validateErrorReference(referenceCase, workload.cpuErrorReferenceCase))
+      if (problems.length > 0) return result
+      const { medianCpuUs } = summarizeCpu(referenceCase.baseline.cpu)
+      errorReference = { caseId: workload.cpuErrorReferenceCase, medianCpuUs, limitUs: cpuLimitUs(medianCpuUs) }
+      limitUs = Math.max(workloadLimitUs, errorReference.limitUs)
+    }
     const exceededBatches = candidateCpu.cpuSamplesUs.filter(sample => sample > limitUs).length
     const failed = candidateCpu.medianCpuUs > limitUs && exceededBatches >= performancePolicy.cpuRequiredSlowBatches
-    result.cpu = { status: failed ? 'fail' : 'pass', baseline: baselineCpu, candidate: candidateCpu, limitUs, exceededBatches }
+    result.cpu = {
+      status: failed ? 'fail' : 'pass',
+      baseline: baselineCpu,
+      candidate: candidateCpu,
+      workloadLimitUs,
+      errorReference,
+      limitUs,
+      exceededBatches,
+    }
     if (failed) problems.push(`CPU budget exceeded in ${exceededBatches}/${performancePolicy.cpuBatches} batches`)
   }
 
@@ -199,6 +242,7 @@ export function checkPerformanceBudgets(workload, baseline, candidate) {
     if (failed) problems.push(`${metric} budget exceeded in ${exceededTrials}/${performancePolicy.memoryTrials} trials`)
   }
   result.memory = { status: memoryMetrics.some(metric => metric.status === 'fail') ? 'fail' : 'pass', metrics: memoryMetrics }
+  result.comparison = baselineUnsupported ? 'newly-supported' : 'measured'
   result.status = problems.length === 0 ? 'pass' : 'fail'
   return result
 }

@@ -1,0 +1,7 @@
+{
+  "packageName": "semverint",
+  "type": "major",
+  "comment": "Encode prerelease identifier types, lengths, and boundaries in ASCII order; preserve exact decimal values and enforce maxSemverInt on every result. Recompute stored integers from their original SemVer values before comparing them with v3 results. Digit budgets must be nonnegative safe integers with a positive total output width; maxSemverInt must be a nonnegative bigint.",
+  "email": "brenankly@gmail.com",
+  "dependentChangeType": "major"
+}

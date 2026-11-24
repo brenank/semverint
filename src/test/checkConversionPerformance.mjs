@@ -200,6 +200,13 @@ function renderSummary(report) {
       '',
     )
     if (evaluation.cpu?.status === 'unmeasurable') lines.push(evaluation.cpu.reason, '')
+    if (evaluation.cpu?.errorReference) {
+      const { workloadLimitUs, errorReference, limitUs } = evaluation.cpu
+      lines.push(
+        `The candidate reports one numeric prerelease OverflowError for a clamp the baseline performed silently. The workload CPU limit is ${formatUs(workloadLimitUs)} µs/call. The baseline ${errorReference.caseId} median of ${formatUs(errorReference.medianCpuUs)} µs/call yields a limit of ${formatUs(errorReference.limitUs)} µs/call. The greater limit, ${formatUs(limitUs)} µs/call, applies.`,
+        '',
+      )
+    }
     if (evaluation.memory?.metrics) {
       lines.push('| Metric | Result | Baseline median | Candidate median | Limit | Candidate trials | Trials over limit |')
       lines.push('| --- | --- | ---: | ---: | ---: | --- | ---: |')
@@ -261,7 +268,11 @@ try {
     candidate: compilePackage(repository, path.join(temporaryDirectory, 'candidate-artifact')),
   }
 
-  for (const workload of performanceCases) {
+  // Measure error references first so every completed workload keeps its evaluation if a later worker fails.
+  const referenceIds = new Set(performanceCases.map(workload => workload.cpuErrorReferenceCase).filter(Boolean))
+  const referenceWorkloads = performanceCases.filter(workload => referenceIds.has(workload.id))
+  const otherWorkloads = performanceCases.filter(workload => !referenceIds.has(workload.id))
+  for (const workload of [...referenceWorkloads, ...otherWorkloads]) {
     process.stdout.write(`Measuring ${workload.id}\n`)
     const testCase = {
       workload,
@@ -276,7 +287,8 @@ try {
       recordMeasurement(testCase, 'baseline', report.builds.baseline.entrypoint, 'memory')
       recordMeasurement(testCase, 'candidate', report.builds.candidate.entrypoint, 'memory')
     }
-    const evaluation = checkPerformanceBudgets(workload, testCase.baseline, testCase.candidate)
+    const referenceCase = report.cases.find(item => item.workload.id === workload.cpuErrorReferenceCase)
+    const evaluation = checkPerformanceBudgets(workload, testCase.baseline, testCase.candidate, referenceCase)
     testCase.evaluation = evaluation
     process.stdout.write(`${workload.id}: ${evaluation.status} (${evaluation.comparison})\n`)
   }
